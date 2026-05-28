@@ -1,0 +1,13 @@
+streamlit
+groq
+pypdf
+faiss-cpu
+sentence-transformers
+nltk
+numpy
+torch
+transformers
+fastapi-mcp
+uvicorn
+pyjwt
+bcrypt
