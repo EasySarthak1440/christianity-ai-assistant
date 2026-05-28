@@ -1,4 +1,4 @@
-# 🧠 RAG AI Knowledge Assistant
+# 🧠 Christianity AI Assistant
 
 > Production-grade Retrieval-Augmented Generation system — multi-format ingestion, source-cited answers, Christianity AI assistant with scripture grounding, denomination awareness, and hallucination prevention.
 
