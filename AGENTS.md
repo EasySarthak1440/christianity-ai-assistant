@@ -15,8 +15,7 @@ cd frontend && npm start
 ## Requirements
 
 - `GROQ_API_KEY` env var (or `.env` file) required at import time in `llm.py:6-7`
-- `pip install -r requirements.txt` **then** `pip install python-multipart` (missing from requirements.txt, needed for `/upload`)
-- Also missing from `requirements.txt`: `rank-bm25`, `python-dotenv` — already installed in this venv
+- `pip install -r requirements.txt` now includes all deps
 - `HF_API_TOKEN` env var (or `.env` file) required for image generation in `image_generator.py:85` (uses Hugging Face Inference API via `huggingface_hub`)
 - NLTK `punkt` + `punkt_tab` downloaded automatically on first `import chunker`
 
@@ -67,11 +66,43 @@ python eval.py --output eval-report.json
 - Judge LLM: Groq `llama-3.3-70b-versatile` via `LangchainLLMWrapper` (bypasses instructor — see `eval.py:47-53`). Metrics: faithfulness, answer_relevancy, context_precision, context_recall.
 - Requires: `pip install ragas datasets langchain-groq langchain-huggingface`
 
+## Agentic AI (LangGraph Multi-Agent System)
+
+- **`agent_graph.py`** — LangGraph stateful agent graph replacing the linear RAG pipeline. 8 nodes with conditional routing:
+
+```
+self_rag_gate → query_router → cache_check → rbac_filter → retrieval_agent → context_builder → answer_generator → output_formatter
+```
+
+- Each node is a pure function operating on `AgentState` (TypedDict). Conditional edges short-circuit to `output_formatter` at gate/cache/RBAC steps when appropriate.
+- The graph is compiled with `MemorySaver` checkpointing and instantiated in `api.py` at startup as `_agent_graph`.
+- New endpoint: `POST /agent/query` — same interface as `/query` but runs through the LangGraph. Accepts optional `agent_framework` field (`"langgraph"` or `"crewai"`).
+
+## MCP (Model Context Protocol)
+
+- **`mcp_server.py`** — Wires up `fastapi-mcp` (`FastApiMCP`) to auto-discover all FastAPI endpoints as MCP tools.
+- Mounted at `/mcp` via HTTP transport in `api.py:38`.
+- Enables Claude Desktop and other MCP-compatible clients to use RAG tools (query, upload, search, Bible lookup) via the MCP protocol.
+- The MCP server forwards `Authorization` headers from incoming requests to tool invocations automatically.
+
+## CrewAI (Alternative Agent Framework)
+
+- **`crew_agent.py`** — `RAGCrew` class with three CrewAI agents:
+  - `Research Analyst` — retrieves relevant document chunks
+  - `Information Synthesizer` — composes answer from retrieved context
+  - `Quality Reviewer` — verifies accuracy and source attribution
+- Sequential process (`Process.sequential`). Invoked via `POST /agent/query` with `"agent_framework": "crewai"`.
+- Uses Groq `llama-3.3-70b-versatile` as the LLM backend for all agents.
+
+## Requirements (updated)
+
+- `pip install -r requirements.txt` now includes all deps: `langgraph`, `langchain`, `langchain-community`, `crewai`, `crewai-tools`, `python-multipart`, `rank-bm25`, `python-dotenv`, `huggingface-hub`, `ragas`, `datasets`, `langchain-groq`, `langchain-huggingface`
+
 ## Gotchas
 
 - No formal Python lint/test suite — manual verification via UI
 - Groq rate-limit fallback in `llm.py:36-41`: `llama-3.3-70b-versatile` → `llama-3.1-8b-instant` on `RateLimitError`
 - Frontend is Create React App (`react-scripts 5.0.1`); tests via `npm test` in `frontend/`
-- `pip install python-multipart` is required and easy to miss
 - JWT default secret is `change-me-in-production-use-a-real-secret` (`auth.py:16`)
 - `.env` file in this repo contains a real API key — do NOT commit it
+- `crew_agent.py` agents use `llm_config` dict (not LangChain objects) because they call Groq directly via the existing `llm.py` wrapper.

@@ -11,3 +11,16 @@ fastapi-mcp
 uvicorn
 pyjwt
 bcrypt
+python-multipart
+rank-bm25
+python-dotenv
+huggingface-hub
+ragas
+datasets
+langchain-groq
+langchain-huggingface
+langgraph
+langchain
+langchain-community
+crewai
+crewai-tools

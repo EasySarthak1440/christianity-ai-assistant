@@ -22,6 +22,10 @@ import shutil
 import uuid
 import json
 
+from agent_graph import create_agent_graph
+from mcp_server import setup_mcp_server
+from crew_agent import RAGCrew
+
 from scripture_rag import ScriptureStore, BIBLE_JSON_URL
 from moderation import moderation_check
 from denomination_prompts import get_system_prompt, get_denominations, validate_denomination
@@ -40,8 +44,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+setup_mcp_server(app)
+
 vs = VectorStore()
 _cache = SemanticCache()
+_agent_graph = create_agent_graph(vs, _cache)
 _debug_log: dict[str, dict] = {}
 DATA_DIR = "data"
 INDEX_PATH = os.path.join(DATA_DIR, "index")
@@ -283,6 +290,72 @@ def query_endpoint(
         "_query_id": query_id,
         "_user": user.username,
     }
+
+# ── agent query (LangGraph) ─────────────────────────────────
+
+class AgentQueryRequest(BaseModel):
+    query: str
+    source_filter: str | None = None
+    agent_framework: str = "langgraph"
+
+@app.post("/agent/query")
+def agent_query_endpoint(
+    request: AgentQueryRequest,
+    user: User = Depends(_require_user),
+):
+    if vs.index is None:
+        return {"error": "No documents indexed yet. Upload a file first."}
+
+    if request.agent_framework == "crewai":
+        crew = RAGCrew(
+            vs=vs,
+            query=request.query,
+            top_k=8,
+            source_filter=request.source_filter,
+        )
+        result = crew.run()
+        return {
+            "query": request.query,
+            "answer": result["answer"],
+            "_framework": "crewai",
+            "_user": user.username,
+        }
+
+    initial_state = {
+        "query": request.query,
+        "source_filter": request.source_filter,
+        "permitted_sources": [],
+        "username": user.username,
+        "user_role": user.role.value,
+        "intent": "",
+        "sensitivity": "safe",
+        "retrieval_config": {},
+        "results": [],
+        "context": "",
+        "answer": "",
+        "similarity": {},
+        "sources_summary": [],
+        "pii_in_query": [],
+        "pii_in_answer": [],
+        "error": None,
+        "query_id": "",
+        "skip_retrieval": False,
+        "cache_hit": False,
+        "no_access": False,
+        "final_output": None,
+    }
+
+    result = _agent_graph.invoke(initial_state)
+    output = result.get("final_output") or {
+        "query": request.query,
+        "answer": result.get("answer", ""),
+        "similarity": result.get("similarity", {}),
+        "sources": result.get("sources_summary", []),
+        "_query_id": result.get("query_id", ""),
+        "_user": user.username,
+    }
+    output["_framework"] = "langgraph"
+    return output
 
 # ── trace persistence ───────────────────────────────────────
 
