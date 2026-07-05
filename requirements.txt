@@ -1,3 +1,4 @@
+httpx
 streamlit
 groq
 pypdf
@@ -24,3 +25,8 @@ langchain
 langchain-community
 crewai
 crewai-tools
+celery
+redis
+openai
+anthropic
+google-generativeai

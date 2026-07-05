@@ -1,0 +1,151 @@
+version: "3.8"
+
+services:
+  # ── Gateway (current monolith, will be refactored to delegate) ──
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - HF_API_TOKEN=${HF_API_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_FALLBACK_CHAIN=${LLM_FALLBACK_CHAIN:-}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-a-real-secret}
+      - DOCUMENT_STORE_URL=http://document_store:8001
+      - LLM_SERVICE_URL=http://llm:8002
+      - BIBLE_SERVICE_URL=http://bible:8003
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+
+  # ── Celery Worker ──
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A tasks worker --loglevel=info --concurrency=2
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - HF_API_TOKEN=${HF_API_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_FALLBACK_CHAIN=${LLM_FALLBACK_CHAIN:-}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production-use-a-real-secret}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+
+  # ── Document Store Service ──
+  document_store:
+    build:
+      context: .
+      dockerfile: services/document_store/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+
+  # ── LLM Service ──
+  llm:
+    build:
+      context: .
+      dockerfile: services/llm/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_FALLBACK_CHAIN=${LLM_FALLBACK_CHAIN:-}
+
+  # ── Bible Service ──
+  bible:
+    build:
+      context: .
+      dockerfile: services/bible/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - HF_API_TOKEN=${HF_API_TOKEN}
+      - REDIS_URL=redis://redis:6379/0
+      - DOCUMENT_STORE_URL=http://document_store:8001
+      - LLM_SERVICE_URL=http://llm:8002
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+
+  # ── Upload Service ──
+  upload:
+    build:
+      context: .
+      dockerfile: services/upload/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - DOCUMENT_STORE_URL=http://document_store:8001
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+
+  # ── Agent Service ──
+  agent:
+    build:
+      context: .
+      dockerfile: services/agent/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_FALLBACK_CHAIN=${LLM_FALLBACK_CHAIN:-}
+      - REDIS_URL=redis://redis:6379/0
+      - DOCUMENT_STORE_URL=http://document_store:8001
+      - LLM_SERVICE_URL=http://llm:8002
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+
+  # ── Redis ──
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

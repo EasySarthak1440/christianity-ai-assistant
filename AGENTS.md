@@ -30,6 +30,7 @@ cd frontend && npm start
 
 ## Architecture
 
+- **`enterprise_rag_core/`** — Shared library package (v0.1.0) for microservices. Contains: `models/`, `chunker.py`, `cleaner.py`, `filter.py`, `shared_model.py`, `vector_store.py`, `event_bus.py`, `llm_providers/`. Installed as editable package (`pip install -e ./enterprise_rag_core`). Future services depend on this.
 - `api.py` instantiates a single `VectorStore`. Index persists to `data/index.index` (FAISS) + `data/index.meta` (pickle) — loaded on startup, saved after every upload/delete.
 - `data/` is gitignored; uploaded files live there at runtime.
 - Multi-format ingestion: `loaders/` auto-detects `.pdf`/`.csv`/`.json` and routes to format-specific loader (`loaders/registry.py:8-12`). `ingestion_manager.py:ingest_file()` is the single entrypoint.
@@ -96,7 +97,71 @@ self_rag_gate → query_router → cache_check → rbac_filter → retrieval_age
 
 ## Requirements (updated)
 
-- `pip install -r requirements.txt` now includes all deps: `langgraph`, `langchain`, `langchain-community`, `crewai`, `crewai-tools`, `python-multipart`, `rank-bm25`, `python-dotenv`, `huggingface-hub`, `ragas`, `datasets`, `langchain-groq`, `langchain-huggingface`
+- `pip install -r requirements.txt` now includes all deps: `langgraph`, `langchain`, `langchain-community`, `crewai`, `crewai-tools`, `python-multipart`, `rank-bm25`, `python-dotenv`, `huggingface-hub`, `ragas`, `datasets`, `langchain-groq`, `langchain-huggingface`, `celery`, `redis`, `openai`, `anthropic`, `google-generativeai`
+
+## Docker
+
+- **`Dockerfile`** — `python:3.11-slim` build. Exposes port 8000.
+- **`docker-compose.yml`** — 8 services:
+
+| Service | Port | Description |
+|---|---|---|
+| `gateway` | 8000 | Current monolith (refactor target for Phase 2d) |
+| `worker` | — | Celery worker |
+| `document_store` | 8001 | FAISS + BM25 vector store (Phase 2b) |
+| `llm` | 8002 | Multi-provider LLM generation (Phase 2c) |
+| `bible` | 8003 | Scripture retrieval (Phase 2e) |
+| `upload` | 8004 | Document ingestion (Phase 2f) |
+| `agent` | 8005 | LangGraph/CrewAI orchestration (Phase 2g) |
+| `redis` | 6379 | Broker + cache |
+
+- `data/` volume mounted for FAISS index persistence across restarts.
+
+```bash
+# Start all services
+GROQ_API_KEY=your_key docker compose up -d
+
+# Or with provider keys for fallback
+GROQ_API_KEY=your_key \
+OPENAI_API_KEY=your_key \
+ANTHROPIC_API_KEY=your_key \
+GOOGLE_API_KEY=your_key \
+docker compose up -d
+```
+
+## Multi-LLM Provider Layer
+
+- **`llm_providers/`** — Abstract `LLMProvider` interface with pluggable backends:
+
+| Provider | Class | Env Config |
+|---|---|---|
+| Groq (default) | `GroqProvider` | `GROQ_API_KEY`, primary: `llama-3.3-70b-versatile`, fallback: `llama-3.1-8b-instant` |
+| OpenAI | `OpenAIProvider` | `OPENAI_API_KEY`, `OPENAI_MODEL` (default: `gpt-4o`) |
+| Gemini | `GeminiProvider` | `GOOGLE_API_KEY`, `GEMINI_MODEL` (default: `gemini-2.0-flash`) |
+| Claude | `ClaudeProvider` | `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` (default: `claude-sonnet-4-20250514`) |
+
+- Provider selected via `LLM_PROVIDER` env var (default: `groq`).
+- Fallback chain via `LLM_FALLBACK_CHAIN` (comma-separated, e.g. `openai,claude`).
+- If primary rate-limits or fails, each fallback is tried in order.
+- `llm.py` now delegates to the provider abstraction — all existing code works unchanged.
+
+## Event-Driven Architecture
+
+- **`event_bus.py`** — Lightweight in-process pub/sub event bus.
+- Events: `document.uploaded`, `document.deleted`, `query.executed`, `cache.invalidated`.
+- Emitted at key points in `api.py` — handlers can be registered via `@event_bus.on("event.type")`.
+- Timestamps auto-attached to all payloads.
+
+## Async Task Queue (Celery + Redis)
+
+- **`celery_app.py`** — Celery app configured with Redis broker/backend.
+- **`tasks.py`** — Background tasks:
+  - `ingest_document` — Loads index, ingests file, saves index (avoids blocking API)
+  - `rebuild_bible_index` — Rebuilds the KJV Bible FAISS index
+  - `generate_image_task` — Generates Christian images via HF API
+- **`GET /tasks/{task_id}`** — Query task status (pending/started/success/failure).
+- **`POST /upload?async=1`** — Dispatch ingestion via Celery (returns `task_id` immediately).
+- Run worker: `celery -A tasks worker --loglevel=info`
 
 ## Gotchas
 
@@ -106,3 +171,91 @@ self_rag_gate → query_router → cache_check → rbac_filter → retrieval_age
 - JWT default secret is `change-me-in-production-use-a-real-secret` (`auth.py:16`)
 - `.env` file in this repo contains a real API key — do NOT commit it
 - `crew_agent.py` agents use `llm_config` dict (not LangChain objects) because they call Groq directly via the existing `llm.py` wrapper.
+
+## Microservices Architecture (Phase 2)
+
+The monolith is being decomposed into 6 microservices + 1 Celery worker + Redis, orchestrated via `docker-compose.yml`.
+
+### Service Layout
+
+```
+services/
+├── document_store/   — FAISS + BM25 index owner (port 8001)
+│   └── api.py        — /search, /add, /sources, /stats
+├── llm/              — Stateless LLM generation (port 8002)
+│   └── api.py        — /generate, /chat
+├── bible/            — Scripture retrieval (port 8003)
+│   └── api.py        — /query, /verify-verse, /denominations, /stats
+├── upload/           — Document ingestion (port 8004)
+│   └── api.py        — /upload
+└── agent/            — LangGraph/CrewAI orchestration (port 8005)
+    ├── api.py        — /agent/query (accepts agent_framework: langgraph|crewai)
+    └── Dockerfile    — copies ~20 RAG pipeline modules; delegates to document_store + llm via HTTP
+```
+
+### Dependency Graph
+
+```
+gateway ──┬── document_store  (HTTP, Phase 2b real)
+          ├── llm             (HTTP, Phase 2c real)
+          ├── bible           (HTTP, Phase 2e real)
+          ├── upload          (HTTP, Phase 2f real)
+           └── agent           (HTTP, real)
+
+agent ──┬── document_store  (HTTP)
+        └── llm             (HTTP)
+
+bible ──┬── document_store  (HTTP)
+        └── llm             (HTTP)
+
+upload ──→ document_store  (HTTP)
+```
+
+### Extraction Order
+
+| Phase | Service | Status |
+|---|---|---|
+| 2a | Infrastructure (services/ + Dockerfiles) | ✅ Done |
+| 2b | Document Store Service | ✅ Done |
+| 2c | LLM Service | ✅ Done |
+| 2d | Gateway refactor (api.py delegates) | ✅ Done |
+| 2e | Bible Service | ✅ Done |
+| 2f | Upload Service | ✅ Done |
+| 2g | Agent Service | ✅ Done |
+
+### Gateway Clients (`gateway_clients.py`)
+
+The gateway transparently delegates to microservices via HTTP when configured:
+
+```python
+# api.py
+from gateway_clients import RemoteVectorStore, remote_generate, is_remote_vs, is_remote_llm
+
+if is_remote_vs():
+    vs = RemoteVectorStore()    # delegates to document_store service
+if is_remote_llm():
+    generate_answer = remote_generate  # delegates to LLM service
+```
+
+- `DOCUMENT_STORE_URL` env var → `RemoteVectorStore` proxy for search/add/delete/list_sources
+- `LLM_SERVICE_URL` env var → `remote_generate()` for top-level LLM calls
+- Internal pipeline modules (`rag_pipeline.py`, `agent_graph.py`) use local imports (in-process)
+- When URLs are not set, gateway falls back to local `VectorStore` / `llm.generate_answer` (current monolith behavior)
+
+### Running Locally (development)
+
+Each service can run standalone via uvicorn, e.g.:
+
+```bash
+# Terminal 1 — Document Store
+uvicorn services.document_store.api:app --reload --port 8001
+
+# Terminal 2 — LLM
+uvicorn services.llm.api:app --reload --port 8002
+
+# Terminal 3 — Gateway (monolith, delegates when URLs set)
+uvicorn api:app --reload --port 8000
+
+# Or with remote delegation:
+DOCUMENT_STORE_URL=http://localhost:8001 LLM_SERVICE_URL=http://localhost:8002 uvicorn api:app --reload --port 8000
+```

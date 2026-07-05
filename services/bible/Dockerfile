@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY enterprise_rag_core/ /app/enterprise_rag_core/
+RUN pip install --no-cache-dir -e /app/enterprise_rag_core
+
+COPY services/bible/ /app/
+
+COPY scripture_rag.py denomination_prompts.py moderation.py \
+     context_builder.py image_generator.py \
+     llm.py access_policy.py vector_store.py shared_model.py \
+     rag_pipeline.py smart_retriever.py reranker.py prompt.py \
+     similarity_scorer.py /app/
+
+COPY loaders/ /app/loaders/
+COPY models/ /app/models/
+
+RUN pip install --no-cache-dir fastapi uvicorn httpx
+
+EXPOSE 8003
+
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8003"]

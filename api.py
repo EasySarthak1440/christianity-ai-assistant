@@ -1,6 +1,6 @@
 from __future__ import annotations
 import re
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -25,6 +25,9 @@ import json
 from agent_graph import create_agent_graph
 from mcp_server import setup_mcp_server
 from crew_agent import RAGCrew
+from event_bus import get_event_bus
+from celery.result import AsyncResult
+from tasks import ingest_document
 
 from scripture_rag import ScriptureStore, BIBLE_JSON_URL
 from moderation import moderation_check
@@ -32,6 +35,8 @@ from denomination_prompts import get_system_prompt, get_denominations, validate_
 from image_generator import validate_prompt as validate_image_prompt, generate_image
 from prompt import build_prompt
 from llm import generate_answer
+
+from gateway_clients import RemoteVectorStore, remote_generate, is_remote_vs, is_remote_llm
 
 app = FastAPI()
 _security = HTTPBearer(auto_error=False)
@@ -44,44 +49,89 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_use_remote_vs = is_remote_vs()
+_use_remote_llm = is_remote_llm()
+
 setup_mcp_server(app)
 
-vs = VectorStore()
-_cache = SemanticCache()
-_agent_graph = create_agent_graph(vs, _cache)
+vs: VectorStore | RemoteVectorStore | None = None
+_cache: SemanticCache | None = None
+_agent_graph = None
+event_bus = None
 _debug_log: dict[str, dict] = {}
 DATA_DIR = "data"
 INDEX_PATH = os.path.join(DATA_DIR, "index")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-scripture_store = ScriptureStore()
-if scripture_store.load():
-    print(f"Bible index ready ({scripture_store.stats()['verses']} verses).")
-else:
-    print("Building Bible index for the first time (this may take ~15s)...")
-    try:
-        scripture_store.build_index(BIBLE_JSON_URL)
-    except Exception as e:
-        print(f"Warning: Bible index build failed: {e}")
-
+scripture_store: ScriptureStore | None = None
+_ready = False
 _SUPPORTED_EXTENSIONS = {".pdf", ".csv", ".json"}
 
-if vs.load(INDEX_PATH):
-    print(f"Loaded saved index with {len(vs.chunks)} chunks.")
-else:
-    print("No saved index found. Loading documents...")
-    existing = [
-        os.path.join(DATA_DIR, f)
-        for f in os.listdir(DATA_DIR)
-        if Path(f).suffix.lower() in _SUPPORTED_EXTENSIONS
-    ]
-    if existing:
-        for path in existing:
-            print(f"Loading: {path}")
-            ingest_file(path, vs)
-        print(f"Vector store ready! {len(existing)} file(s) loaded.")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+@app.middleware("http")
+async def _ready_middleware(request, call_next):
+    if not _ready and request.url.path != "/health":
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "loading", "ready": False})
+    return await call_next(request)
+
+
+@app.on_event("startup")
+async def _startup():
+    import asyncio
+    asyncio.create_task(_init_app())
+
+async def _init_app():
+    global vs, _cache, _agent_graph, event_bus, scripture_store, _ready
+
+    if _use_remote_vs:
+        print(f"[Gateway] Using remote vector store: {os.environ['DOCUMENT_STORE_URL']}")
+        vs = RemoteVectorStore()
     else:
-        print("No documents found — upload one via the UI.")
+        print("[Gateway] Using local vector store")
+        vs = VectorStore()
+
+    if _use_remote_llm:
+        print(f"[Gateway] Using remote LLM: {os.environ['LLM_SERVICE_URL']}")
+
+    _cache = SemanticCache()
+    _agent_graph = create_agent_graph(vs, _cache)
+    event_bus = get_event_bus()
+
+    scripture_store = ScriptureStore()
+    if scripture_store.load():
+        print(f"Bible index ready ({scripture_store.stats()['verses']} verses).")
+    else:
+        print("Building Bible index for the first time (this may take ~15s)...")
+        try:
+            scripture_store.build_index(BIBLE_JSON_URL)
+        except Exception as e:
+            print(f"Warning: Bible index build failed: {e}")
+
+    if _use_remote_vs:
+        vs.load()
+        if vs.index is not None:
+            print(f"[Gateway] Remote store ready — ~{len(vs.chunks)} chunks")
+    else:
+        if vs.load(INDEX_PATH):
+            print(f"Loaded saved index with {len(vs.chunks)} chunks.")
+        else:
+            print("No saved index found. Loading documents...")
+            existing = [
+                os.path.join(DATA_DIR, f)
+                for f in os.listdir(DATA_DIR)
+                if Path(f).suffix.lower() in _SUPPORTED_EXTENSIONS
+            ]
+            if existing:
+                for path in existing:
+                    print(f"Loading: {path}")
+                    ingest_file(path, vs)
+                print(f"Vector store ready! {len(existing)} file(s) loaded.")
+            else:
+                print("No documents found — upload one via the UI.")
+
+    _ready = True
+    print("[Gateway] Startup complete — ready to serve requests.")
 
 def _save_index() -> None:
     vs.save(INDEX_PATH)
@@ -142,6 +192,7 @@ def login(request: LoginRequest):
 
 @app.post("/upload")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     user: User = Depends(_require_user),
 ):
@@ -156,10 +207,24 @@ async def upload_file(
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
+    async_mode = request.query_params.get("async", "0") == "1"
+    if async_mode:
+        task = ingest_document.delay(dest, owner=user.username, classification="internal")
+        event_bus.emit("document.uploaded", filename=file.filename, task_id=task.id, owner=user.username, async_mode=True)
+        return {
+            "message": f"Indexing started for {file.filename}",
+            "filename": file.filename,
+            "task_id": task.id,
+            "async": True,
+            "owner": user.username,
+        }
+
     count = ingest_file(dest, vs, owner=user.username, classification="internal")
     sources = vs.list_sources()
     _save_index()
     _cache.invalidate()
+
+    event_bus.emit("document.uploaded", filename=file.filename, chunks=count, owner=user.username)
 
     return {
         "message": f"Indexed {count} chunks from {file.filename}",
@@ -282,6 +347,8 @@ def query_endpoint(
 
     _cache.set(request.query, answer, similarity, sources)
 
+    event_bus.emit("query.executed", query_id=query_id, user=user.username, intent=route.get("intent", "unknown"))
+
     return {
         "query": request.query,
         "answer": answer,
@@ -395,6 +462,34 @@ def cache_invalidate(user: User = Depends(_require_user)):
     _cache.invalidate()
     return {"message": "Cache cleared."}
 
+# ── task status ──────────────────────────────────────────────
+
+@app.get("/tasks/{task_id}")
+def task_status(task_id: str, user: User = Depends(_require_user)):
+    from celery_app import celery_app
+    result = AsyncResult(task_id, app=celery_app)
+    return {
+        "task_id": task_id,
+        "status": result.state,
+        "ready": result.ready(),
+        "successful": result.successful() if result.ready() else None,
+        "result": result.result if result.ready() else None,
+    }
+
+# ── health ──────────────────────────────────────────────────
+
+@app.get("/health")
+def health_check():
+    if not _ready:
+        return {"status": "loading", "ready": False}
+    return {
+        "status": "ok",
+        "ready": True,
+        "chunks": len(vs.chunks) if vs and vs.chunks else 0,
+        "sources": len(vs.list_sources()) if vs and vs.index is not None else 0,
+        "cache_entries": _cache.stats().get("entries", 0) if _cache else 0,
+    }
+
 # ── sources ─────────────────────────────────────────────────
 
 @app.get("/sources")
@@ -418,6 +513,7 @@ def delete_source(
         os.remove(path)
     _save_index()
     _cache.invalidate()
+    event_bus.emit("document.deleted", filename=filename, chunks_removed=removed)
     return {
         "message": f"Removed {filename}",
         "removed_chunks": removed,
@@ -585,7 +681,7 @@ def christianity_query(
     )
 
     # 8. Call LLM
-    answer = generate_answer(full_prompt)
+    answer = remote_generate(full_prompt) if _use_remote_llm else generate_answer(full_prompt)
 
     # 9. Post-process: append grounding note
     sources_used = []

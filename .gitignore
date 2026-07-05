@@ -7,3 +7,5 @@ data/
 .streamlit/
 *.Zone.Identifier
 *.pdf
+tmp/
+

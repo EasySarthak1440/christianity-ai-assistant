@@ -1,0 +1,9 @@
+groq
+faiss-cpu
+sentence-transformers
+nltk
+numpy
+rank-bm25
+openai
+anthropic
+google-generativeai

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Optional, List
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 
 from vector_store import VectorStore
 from smart_retriever import retrieve
@@ -23,22 +23,23 @@ class RAGCrew:
         self._context: str = ""
         self._answer: str = ""
 
-    def _get_llm_config(self) -> dict:
-        return {
-            "provider": "groq",
-            "model": "llama-3.3-70b-versatile",
-            "api_key": os.environ.get("GROQ_API_KEY", ""),
-            "temperature": 0,
-        }
+    def _get_llm(self) -> LLM:
+        return LLM(
+            model="llama-3.3-70b-versatile",
+            provider="openai",
+            base_url="https://api.groq.com/openai/v1",
+            api_key=os.environ.get("GROQ_API_KEY", ""),
+            temperature=0,
+        )
 
     def _create_agents(self) -> list[Agent]:
-        llm_config = self._get_llm_config()
+        llm = self._get_llm()
         return [
             Agent(
                 role="Research Analyst",
                 goal="Find the most relevant information from document sources to answer the user query",
                 backstory="Expert at analyzing document corpora and extracting key information using hybrid search techniques.",
-                llm_config=llm_config,
+                llm=llm,
                 allow_delegation=False,
                 verbose=False,
             ),
@@ -46,7 +47,7 @@ class RAGCrew:
                 role="Information Synthesizer",
                 goal="Synthesize retrieved information into a coherent, well-structured answer",
                 backstory="Expert at combining information from multiple sources into clear, factual responses with proper citations.",
-                llm_config=llm_config,
+                llm=llm,
                 allow_delegation=False,
                 verbose=False,
             ),
@@ -54,7 +55,7 @@ class RAGCrew:
                 role="Quality Reviewer",
                 goal="Verify the answer is accurate, complete, and properly cited",
                 backstory="Detail-oriented reviewer ensuring answers are faithful to source material and properly reference their origins.",
-                llm_config=llm_config,
+                llm=llm,
                 allow_delegation=False,
                 verbose=False,
             ),
