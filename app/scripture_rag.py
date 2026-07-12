@@ -7,7 +7,7 @@ from typing import Optional
 
 import faiss
 
-from shared_model import get_embedding_model
+from rag.shared_model import get_embedding_model
 
 BIBLE_JSON_URL = "https://raw.githubusercontent.com/midvash/bible-data/main/versions/en/kjv/kjv.json"
 INDEX_DIR = os.path.join("data", "bible_index")

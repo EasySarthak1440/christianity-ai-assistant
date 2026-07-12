@@ -43,19 +43,19 @@ async def startup():
 
     get_embedding_model()
 
-    from scripture_rag import ScriptureStore
+    from app.scripture_rag import ScriptureStore
     _store = ScriptureStore()
     if _store.load():
         print(f"[Bible] Index ready ({_store.stats()['verses']} verses)")
     else:
         print("[Bible] No index found — will build on first query")
         try:
-            from scripture_rag import BIBLE_JSON_URL
+            from app.scripture_rag import BIBLE_JSON_URL
             _store.build_index(BIBLE_JSON_URL)
         except Exception as e:
             print(f"[Bible] Index build failed: {e}")
 
-    from denomination_prompts import get_denominations
+    from app.denomination_prompts import get_denominations
     _SYSTEM_PROMPTS = {"general", "catholic", "orthodox", "protestant"}
     _DENOMINATION_LIST = get_denominations()
 
@@ -83,13 +83,13 @@ async def query(req: BibleQueryRequest):
     if not q:
         return {"error": "Query is required."}
 
-    from moderation import moderation_check
+    from app.moderation import moderation_check
 
     mod = moderation_check(q, _store if _store.loaded else None)
     if not mod["allowed"]:
         return {"query": q, "answer": mod["safe_response"], "denomination": req.denomination, "moderation": mod["reason"], "sources": []}
 
-    from denomination_prompts import validate_denomination
+    from app.denomination_prompts import validate_denomination
     denom = validate_denomination(req.denomination)
 
     _DENOM_BOOK_ANSWERS = {
@@ -156,7 +156,7 @@ async def query(req: BibleQueryRequest):
             scripture_context += f'{v["reference"]} (KJV) — {v["text"]}\n'
             verified_refs.append({"reference": v["reference"], "text": v["text"]})
 
-    from denomination_prompts import get_system_prompt
+    from app.denomination_prompts import get_system_prompt
     system_prompt = get_system_prompt(denom)
 
     doc_context = ""
@@ -167,15 +167,15 @@ async def query(req: BibleQueryRequest):
             r = httpx.post(f"{DOCUMENT_STORE_URL}/search", json={"query": q, "top_k": 5}, timeout=10)
             results = r.json().get("results", [])
             if results:
-                from context_builder import build_context
+                from rag.context_builder import build_context
                 doc_context = build_context([res["chunk"] for res in results], max_chars=2000)
                 rag_sources = [{"source": res.get("source", ""), "page": res.get("page", 0)} for res in results]
         except Exception:
             pass
     else:
-        from context_builder import build_context
-        from rag_pipeline import run_rag
-        from vector_store import VectorStore
+        from rag.context_builder import build_context
+        from rag.pipeline import run_rag
+        from rag.vector_store import VectorStore
         try:
             vs = VectorStore()
             vs.load("data/index")
@@ -204,10 +204,10 @@ async def query(req: BibleQueryRequest):
             r = httpx.post(f"{LLM_SERVICE_URL}/generate", json={"prompt": full_prompt}, timeout=30)
             answer = r.json().get("text", "")
         except Exception:
-            from llm import generate_answer
+            from rag.llm import generate_answer
             answer = generate_answer(full_prompt)
     else:
-        from llm import generate_answer
+        from rag.llm import generate_answer
         answer = generate_answer(full_prompt)
 
     sources_used = []
@@ -241,7 +241,7 @@ async def verify_verse(req: VerifyVerseRequest):
 
 @app.get("/denominations")
 async def list_denominations():
-    from denomination_prompts import get_denominations
+    from app.denomination_prompts import get_denominations
     return {"denominations": get_denominations()}
 
 
@@ -257,8 +257,8 @@ async def generate_image(req: ImageGenRequest):
     p = req.prompt.strip()
     if not p:
         return {"error": "Prompt is required."}
-    from image_generator import generate_image as gen_img
-    from image_generator import validate_prompt as validate_image_prompt
+    from app.image_generator import generate_image as gen_img
+    from app.image_generator import validate_prompt as validate_image_prompt
     validation = validate_image_prompt(p)
     if not validation["allowed"]:
         return {"allowed": False, "reason": validation["reason"], "message": validation["safe_response"]}

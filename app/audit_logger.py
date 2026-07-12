@@ -32,7 +32,7 @@ def log_query(
 
     if _MONGO_MODE:
         try:
-            from mongo_db import log_audit_entry
+            from .mongo_db import log_audit_entry
             asyncio.ensure_future(log_audit_entry(entry))
         except Exception:
             pass

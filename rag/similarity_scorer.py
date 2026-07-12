@@ -1,6 +1,6 @@
 from sentence_transformers import util
 
-from shared_model import get_embedding_model
+from .shared_model import get_embedding_model
 
 
 # returns 'chunk', 'source', 'page'

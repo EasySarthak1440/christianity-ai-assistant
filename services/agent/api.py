@@ -32,11 +32,11 @@ class AgentQueryRequest(BaseModel):
 async def startup():
     get_embedding_model()
 
-    from cache import SemanticCache
+    from app.cache import SemanticCache
 
     vs: VectorStore
     if _use_remote_vs:
-        from gateway_clients import RemoteVectorStore
+        from app.gateway_clients import RemoteVectorStore
         vs = RemoteVectorStore(DOCUMENT_STORE_URL)
         vs.load()
     else:
@@ -48,11 +48,11 @@ async def startup():
     cache = SemanticCache()
 
     if _use_remote_llm:
-        import llm as _llm_mod
-        from gateway_clients import remote_generate
+        from app.gateway_clients import remote_generate
+        from rag import llm as _llm_mod
         _llm_mod.generate_answer = remote_generate
 
-    from agent_graph import create_agent_graph
+    from agents.graph import create_agent_graph
     global _agent_graph
     _agent_graph = create_agent_graph(vs, cache)
     print(f"[Agent] Graph ready | vs={'remote' if _use_remote_vs else 'local'} llm={'remote' if _use_remote_llm else 'local'}")
@@ -71,10 +71,10 @@ async def health():
 @app.post("/agent/query")
 async def agent_query(req: AgentQueryRequest):
     if req.agent_framework == "crewai":
-        from crew_agent import RAGCrew
+        from agents.crew import RAGCrew
 
         if _use_remote_vs:
-            from gateway_clients import RemoteVectorStore
+            from app.gateway_clients import RemoteVectorStore
             vs = RemoteVectorStore(DOCUMENT_STORE_URL)
         else:
             vs = VectorStore()

@@ -11,9 +11,10 @@ RUN pip install --no-cache-dir -e /app/enterprise_rag_core
 
 COPY services/upload/ /app/
 
-COPY ingestion_manager.py chunker.py cleaner.py filter.py pdf_loader.py \
-     vector_store.py shared_model.py tasks.py celery_app.py llm.py /app/
-
+COPY app/ /app/app/
+COPY rag/ /app/rag/
+COPY tasks/ /app/tasks/
+COPY ingestion/ /app/ingestion/
 COPY loaders/ /app/loaders/
 
 RUN pip install --no-cache-dir fastapi uvicorn httpx python-multipart pypdf celery redis

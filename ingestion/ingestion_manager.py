@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from chunker import smart_chunk
-from cleaner import clean_text
 from loaders import load_file
-from vector_store import VectorStore
+from rag.chunker import smart_chunk
+from rag.cleaner import clean_text
+from rag.vector_store import VectorStore
 
 
 def ingest_file(

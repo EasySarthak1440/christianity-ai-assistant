@@ -1,7 +1,7 @@
-from chunker import smart_chunk
-from cleaner import clean_text
-from pdf_loader import load_pdfs
-from vector_store import VectorStore
+from loaders.pdf_loader import load_pdfs
+from rag.chunker import smart_chunk
+from rag.cleaner import clean_text
+from rag.vector_store import VectorStore
 
 
 # return quantity(chunk-indixed) in vector store

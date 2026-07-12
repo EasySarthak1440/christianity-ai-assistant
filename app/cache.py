@@ -1,6 +1,6 @@
 import numpy as np
 
-from shared_model import get_embedding_model
+from rag.shared_model import get_embedding_model
 
 
 class SemanticCache:

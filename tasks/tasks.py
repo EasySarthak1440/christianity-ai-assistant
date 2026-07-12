@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from celery_app import celery_app
-from ingestion_manager import ingest_file
-from vector_store import VectorStore
+from ingestion.ingestion_manager import ingest_file
+from rag.vector_store import VectorStore
+
+from .celery_app import celery_app
 
 DATA_DIR = "data"
 INDEX_PATH = os.path.join(DATA_DIR, "index")
@@ -34,7 +35,7 @@ def ingest_document(
 
 @celery_app.task(bind=True)
 def rebuild_bible_index(self) -> dict:
-    from scripture_rag import BIBLE_JSON_URL, ScriptureStore
+    from app.scripture_rag import BIBLE_JSON_URL, ScriptureStore
 
     store = ScriptureStore()
     store.build_index(BIBLE_JSON_URL)
@@ -44,7 +45,7 @@ def rebuild_bible_index(self) -> dict:
 
 @celery_app.task(bind=True)
 def generate_image_task(self, prompt: str) -> dict:
-    from image_generator import generate_image
+    from app.image_generator import generate_image
 
     result = generate_image(prompt)
     result["task_id"] = self.request.id

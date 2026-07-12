@@ -13,30 +13,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from access_policy import resolve_permitted_sources
-from agent_graph import create_agent_graph
-from audit_logger import log_query
-from auth import authenticate, create_token, decode_token
-from cache import SemanticCache
-from context_builder import build_sources_summary
-from crew_agent import RAGCrew
-from denomination_prompts import get_denominations, get_system_prompt, validate_denomination
-from event_bus import get_event_bus
-from gateway_clients import RemoteVectorStore, is_remote_llm, is_remote_vs, remote_generate
-from image_generator import generate_image
-from image_generator import validate_prompt as validate_image_prompt
-from ingestion_manager import ingest_file
-from llm import generate_answer
-from mcp_server import setup_mcp_server
+from agents.crew import RAGCrew
+from agents.graph import create_agent_graph
+from ingestion.ingestion_manager import ingest_file
 from models.role import Role
 from models.user import User
-from moderation import moderation_check
-from query_router import classify_query, get_retrieval_config
-from rag_pipeline import run_rag
-from scripture_rag import BIBLE_JSON_URL, ScriptureStore
-from sensitivity_detector import contains_pii, is_high_risk_query, redact_pii
-from tasks import ingest_document
-from vector_store import VectorStore
+from rag.context_builder import build_sources_summary
+from rag.llm import generate_answer
+from rag.pipeline import run_rag
+from rag.query_router import classify_query, get_retrieval_config
+from rag.sensitivity_detector import contains_pii, is_high_risk_query, redact_pii
+from rag.vector_store import VectorStore
+from tasks.tasks import ingest_document
+
+from .access_policy import resolve_permitted_sources
+from .audit_logger import log_query
+from .auth import authenticate, create_token, decode_token
+from .cache import SemanticCache
+from .denomination_prompts import get_denominations, get_system_prompt, validate_denomination
+from .event_bus import get_event_bus
+from .gateway_clients import RemoteVectorStore, is_remote_llm, is_remote_vs, remote_generate
+from .image_generator import generate_image
+from .image_generator import validate_prompt as validate_image_prompt
+from .mcp_server import setup_mcp_server
+from .moderation import moderation_check
+from .scripture_rag import BIBLE_JSON_URL, ScriptureStore
 
 app = FastAPI()
 _security = HTTPBearer(auto_error=False)
@@ -130,7 +131,7 @@ async def _init_app():
             else:
                 print("No documents found — upload one via the UI.")
 
-    from mongo_db import ensure_indexes, is_mongo_available
+    from .mongo_db import ensure_indexes, is_mongo_available
     if is_mongo_available():
         try:
             await ensure_indexes()
@@ -441,8 +442,8 @@ def _save_trace(query_id: str, trace: dict) -> None:
     path = os.path.join(_TRACES_DIR, f"{query_id}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, indent=2, default=str)
-    from mongo_db import is_mongo_available
-    from mongo_db import save_trace as mongo_save
+    from .mongo_db import is_mongo_available
+    from .mongo_db import save_trace as mongo_save
     if is_mongo_available():
         import asyncio
         asyncio.ensure_future(mongo_save(query_id, trace))
@@ -459,8 +460,8 @@ def debug_query(query_id: str, user: User = Depends(_require_user)):
         if os.path.exists(trace_path):
             with open(trace_path, encoding="utf-8") as f:
                 return json.load(f)
-        from mongo_db import get_trace as mongo_get
-        from mongo_db import is_mongo_available
+        from .mongo_db import get_trace as mongo_get
+        from .mongo_db import is_mongo_available
         if is_mongo_available():
             import asyncio
             doc = asyncio.run(mongo_get(query_id))
@@ -497,7 +498,7 @@ async def query_analytics(
 ):
     if user.role != Role.admin:
         raise HTTPException(status_code=403, detail="Admin only.")
-    from mongo_db import get_analytics, is_mongo_available
+    from .mongo_db import get_analytics, is_mongo_available
     if not is_mongo_available():
         return {"error": "MongoDB not configured. Set MONGO_URL env var."}
     return await get_analytics(
@@ -511,7 +512,7 @@ async def query_analytics(
 
 @app.get("/tasks/{task_id}")
 def task_status(task_id: str, user: User = Depends(_require_user)):
-    from celery_app import celery_app
+    from tasks.celery_app import celery_app
     result = AsyncResult(task_id, app=celery_app)
     return {
         "task_id": task_id,
@@ -701,7 +702,7 @@ def christianity_query(
                     rerank=True,
                 )
                 if results:
-                    from context_builder import build_context
+                    from rag.context_builder import build_context
                     doc_context = build_context(results, max_chars=2000)
                     rag_sources = [{"source": r.get("source", ""), "page": r.get("page", 0)} for r in results]
             except Exception:

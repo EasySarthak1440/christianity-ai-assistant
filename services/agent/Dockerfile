@@ -11,13 +11,9 @@ RUN pip install --no-cache-dir -e /app/enterprise_rag_core
 
 COPY services/agent/ /app/
 
-# Agent graph + CrewAI + RAG pipeline modules
-COPY agent_graph.py crew_agent.py vector_store.py shared_model.py \
-     smart_retriever.py reranker.py filter.py context_builder.py \
-     prompt.py llm.py similarity_scorer.py query_router.py \
-     sensitivity_detector.py audit_logger.py cache.py access_policy.py \
-     gateway_clients.py /app/
-
+COPY app/ /app/app/
+COPY rag/ /app/rag/
+COPY agents/ /app/agents/
 COPY llm_providers/ /app/llm_providers/
 COPY models/ /app/models/
 COPY loaders/ /app/loaders/

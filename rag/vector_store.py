@@ -6,7 +6,7 @@ import faiss
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from shared_model import get_embedding_model
+from .shared_model import get_embedding_model
 
 _RRF_K = 60
 _DENSE_WEIGHT = 0.6

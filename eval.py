@@ -7,8 +7,8 @@ from datetime import datetime
 
 import numpy as np
 
-from rag_pipeline import run_rag
-from vector_store import VectorStore
+from rag.pipeline import run_rag
+from rag.vector_store import VectorStore
 
 warnings.filterwarnings("ignore")
 
@@ -112,7 +112,7 @@ def run_eval(output_path: str | None = None) -> None:
     if not vs.load(INDEX_PATH):
         from pathlib import Path
 
-        from ingestion_manager import ingest_file
+        from ingestion.ingestion_manager import ingest_file
         _SUPPORTED = {".pdf", ".csv", ".json"}
         docs = [
             os.path.join(DATA_DIR, f)

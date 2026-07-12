@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from loaders.csv_loader import load_csv
-from loaders.json_loader import load_json
-from pdf_loader import load_pdf
+from .csv_loader import load_csv
+from .json_loader import load_json
+from .pdf_loader import load_pdf
 
 _FORMAT_LOADERS = {
     ".pdf": load_pdf,

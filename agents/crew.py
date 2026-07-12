@@ -4,7 +4,7 @@ import os
 
 from crewai import LLM, Agent, Crew, Process, Task
 
-from vector_store import VectorStore
+from rag.vector_store import VectorStore
 
 
 class RAGCrew:

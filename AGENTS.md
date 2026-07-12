@@ -6,7 +6,7 @@ Enterprise RAG: Python backend (FastAPI + FAISS + Groq) + React frontend. Suppor
 
 ```bash
 # Terminal 1 — backend (port 8000)
-uvicorn api:app --reload --port 8000
+uvicorn app.api:app --reload --port 8000
 
 # Terminal 2 — frontend (port 3000)
 cd frontend && npm start
@@ -40,11 +40,11 @@ cd frontend && npm start
 - Roles: `admin`, `manager`, `employee`, `auditor`, `compliance` (`models/role.py:5-9`).
 - `access_policy.py` resolves permitted sources via `data/access_policies.json`. Default policy allows `*` role to all sources.
 - `/debug` and `/cache/*` admin-only; `/sources/{filename}` DELETE restricted to admin; `/upload` sets owner from authenticated user.
-- **Retrieval**: FAISS inner-product (dense, 0.6) + BM25 (sparse, 0.4) fused via RRF (`vector_store.py:52-113`). `smart_retriever.py` adds multi-query expansion (LLM generates 2 variants) + cross-encoder reranking (`ms-marco-MiniLM-L-6-v2`).
+- **Retrieval**: FAISS inner-product (dense, 0.6) + BM25 (sparse, 0.4) fused via RRF (`rag/vector_store.py:52-113`). `rag/smart_retriever.py` adds multi-query expansion (LLM generates 2 variants) + cross-encoder reranking (`ms-marco-MiniLM-L-6-v2`).
 - **Chunking**: Small-to-Big: child 200ch, parent 1500ch, overlap 100ch (`chunker.py:8-12`). `parent_text` in metadata, used in context.
 - Context built with Lost-in-the-Middle ordering (`context_builder.py:6-12`), max 4000 chars.
 - Semantic cache (threshold 0.95, max 512 entries, FIFO eviction). Invalidated on `/upload`, `DELETE /sources/{filename}`.
-- Self-RAG gate: ≤4 greeting-like tokens skip retrieval (`api.py:162-173`).
+- Self-RAG gate: ≤4 greeting-like tokens skip retrieval (`app/api.py:162-173`).
 - Query routing: `query_router.py` classifies intent (`fact_lookup`|`summarization`|`comparison`|`cross_source`|`data_analysis`) and tunes `top_k`/`rerank` per intent.
 - Per-query trace persisted to `data/traces/{query_id}.json`; retrieve via `GET /debug/{query_id}` (admin-only). Rolling in-memory log capped at 200 entries.
 - Answer similarity scored vs. chunks (`similarity_scorer.py`): HIGH ≥0.75, MEDIUM ≥0.50.
@@ -53,7 +53,7 @@ cd frontend && npm start
 
 - PII detection (SSN, credit card, email, phone, IP) in queries and answers — auto-redacts (`sensitivity_detector.py`).
 - High-risk keyword check (`password`, `secret`, `credential`, etc.) flags queries (`is_high_risk_query`).
-- Every query logged to `data/audit.log` (JSONL) with user, intent, PII findings (`audit_logger.py`).
+- Every query logged to `data/audit.log` (JSONL) with user, intent, PII findings (`app/audit_logger.py`).
 
 ## Evaluation
 
@@ -70,7 +70,7 @@ python eval.py --output eval-report.json
 
 ## Agentic AI (LangGraph Multi-Agent System)
 
-- **`agent_graph.py`** — LangGraph stateful agent graph replacing the linear RAG pipeline. 8 nodes with conditional routing:
+- **`agents/graph.py`** — LangGraph stateful agent graph replacing the linear RAG pipeline. 8 nodes with conditional routing:
 
 ```
 self_rag_gate → query_router → cache_check → rbac_filter → retrieval_agent → context_builder → answer_generator → output_formatter
@@ -82,14 +82,14 @@ self_rag_gate → query_router → cache_check → rbac_filter → retrieval_age
 
 ## MCP (Model Context Protocol)
 
-- **`mcp_server.py`** — Wires up `fastapi-mcp` (`FastApiMCP`) to auto-discover all FastAPI endpoints as MCP tools.
-- Mounted at `/mcp` via HTTP transport in `api.py:38`.
+- **`app/mcp_server.py`** — Wires up `fastapi-mcp` (`FastApiMCP`) to auto-discover all FastAPI endpoints as MCP tools.
+- Mounted at `/mcp` via HTTP transport in `app/api.py:38`.
 - Enables Claude Desktop and other MCP-compatible clients to use RAG tools (query, upload, search, Bible lookup) via the MCP protocol.
 - The MCP server forwards `Authorization` headers from incoming requests to tool invocations automatically.
 
 ## CrewAI (Alternative Agent Framework)
 
-- **`crew_agent.py`** — `RAGCrew` class with three CrewAI agents:
+- **`agents/crew.py`** — `RAGCrew` class with three CrewAI agents:
   - `Research Analyst` — retrieves relevant document chunks
   - `Information Synthesizer` — composes answer from retrieved context
   - `Quality Reviewer` — verifies accuracy and source attribution
@@ -179,7 +179,7 @@ docker compose up -d
 - Frontend is Create React App (`react-scripts 5.0.1`); tests via `npm test` in `frontend/`
 - JWT default secret is `change-me-in-production-use-a-real-secret` (`auth.py:16`)
 - `.env` file in this repo contains a real API key — do NOT commit it
-- `crew_agent.py` agents use `llm_config` dict (not LangChain objects) because they call Groq directly via the existing `llm.py` wrapper.
+- `agents/crew.py` agents use `llm_config` dict (not LangChain objects) because they call Groq directly via the existing `rag/llm.py` wrapper.
 
 ## Microservices Architecture (Phase 2)
 
@@ -232,13 +232,13 @@ upload ──→ document_store  (HTTP)
 | 2f | Upload Service | ✅ Done |
 | 2g | Agent Service | ✅ Done |
 
-### Gateway Clients (`gateway_clients.py`)
+### Gateway Clients (`app/gateway_clients.py`)
 
 The gateway transparently delegates to microservices via HTTP when configured:
 
 ```python
-# api.py
-from gateway_clients import RemoteVectorStore, remote_generate, is_remote_vs, is_remote_llm
+# app/api.py
+from app.gateway_clients import RemoteVectorStore, remote_generate, is_remote_vs, is_remote_llm
 
 if is_remote_vs():
     vs = RemoteVectorStore()    # delegates to document_store service
@@ -248,7 +248,7 @@ if is_remote_llm():
 
 - `DOCUMENT_STORE_URL` env var → `RemoteVectorStore` proxy for search/add/delete/list_sources
 - `LLM_SERVICE_URL` env var → `remote_generate()` for top-level LLM calls
-- Internal pipeline modules (`rag_pipeline.py`, `agent_graph.py`) use local imports (in-process)
+- Internal pipeline modules (`rag/pipeline.py`, `agents/graph.py`) use local imports (in-process)
 - When URLs are not set, gateway falls back to local `VectorStore` / `llm.generate_answer` (current monolith behavior)
 
 ### Running Locally (development)
@@ -263,8 +263,8 @@ uvicorn services.document_store.api:app --reload --port 8001
 uvicorn services.llm.api:app --reload --port 8002
 
 # Terminal 3 — Gateway (monolith, delegates when URLs set)
-uvicorn api:app --reload --port 8000
+uvicorn app.api:app --reload --port 8000
 
 # Or with remote delegation:
-DOCUMENT_STORE_URL=http://localhost:8001 LLM_SERVICE_URL=http://localhost:8002 uvicorn api:app --reload --port 8000
+DOCUMENT_STORE_URL=http://localhost:8001 LLM_SERVICE_URL=http://localhost:8002 uvicorn app.api:app --reload --port 8000
 ```

@@ -11,12 +11,8 @@ RUN pip install --no-cache-dir -e /app/enterprise_rag_core
 
 COPY services/bible/ /app/
 
-COPY scripture_rag.py denomination_prompts.py moderation.py \
-     context_builder.py image_generator.py \
-     llm.py access_policy.py vector_store.py shared_model.py \
-     rag_pipeline.py smart_retriever.py reranker.py prompt.py \
-     similarity_scorer.py /app/
-
+COPY app/ /app/app/
+COPY rag/ /app/rag/
 COPY loaders/ /app/loaders/
 COPY models/ /app/models/
 

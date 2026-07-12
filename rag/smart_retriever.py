@@ -3,9 +3,9 @@ import os
 
 from groq import Groq
 
-from filter import filter_chunks
-from reranker import rerank
-from vector_store import VectorStore
+from .filter import filter_chunks
+from .reranker import rerank
+from .vector_store import VectorStore
 
 _groq = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 _RRF_K = 60

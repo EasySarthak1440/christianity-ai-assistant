@@ -51,7 +51,7 @@ async def upload_file(
         f.write(content)
 
     if async_mode:
-        from tasks import ingest_document
+        from tasks.tasks import ingest_document
         task = ingest_document.delay(str(file_path), owner=owner, classification=classification)
         return {
             "message": f"Indexing started for {file.filename}",
@@ -61,7 +61,7 @@ async def upload_file(
         }
 
     from enterprise_rag_core.event_bus import get_event_bus
-    from ingestion_manager import ingest_file
+    from ingestion.ingestion_manager import ingest_file
 
     if _use_remote_vs:
         import httpx
@@ -72,7 +72,7 @@ async def upload_file(
         sources = [c["metadata"]["source"] for c in chunk_data]
         sources = list(set(sources))
     else:
-        from vector_store import VectorStore
+        from rag.vector_store import VectorStore
         vs = VectorStore()
         index_path = "data/index"
         if Path(f"{index_path}.index").exists():
@@ -92,9 +92,9 @@ async def upload_file(
 
 
 def _ingest_locally(file_path: str, owner: str, classification: str) -> tuple[int, list[dict]]:
-    from chunker import smart_chunk
-    from cleaner import clean_text
     from loaders import load_file
+    from rag.chunker import smart_chunk
+    from rag.cleaner import clean_text
 
     pages = load_file(file_path)
     source = Path(file_path).name
