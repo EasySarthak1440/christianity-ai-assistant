@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import {
   MessageSquare, FileText, Settings, Search, Upload, Mic, Send,
   Plus, Sparkles, Brain, Database, Clock, ChevronDown, Shield,
-  GitBranch, BookOpen, ArrowRight, Layers, Trash2, CheckCircle, AlertCircle, LogIn, Image, Loader
+  GitBranch, BookOpen, ArrowRight, Layers, Trash2, CheckCircle, AlertCircle, LogIn, Image
 } from "lucide-react"
 import DenominationSelector from './components/DenominationSelector'
 import ImageGenerator from './components/ImageGenerator'
@@ -140,7 +140,7 @@ export default function RAGInterface() {
   useEffect(() => {
     if (!token) return
     fetch(`${API}/sources`, { headers: authHeaders() }).then(r=>r.json()).then(d=>{ if(d.sources) syncDocs(d.sources) }).catch(()=>{})
-  }, [token])
+  }, [token, authHeaders])
 
   useEffect(() => {
     const fn = e => {
