@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import {
   MessageSquare, FileText, Settings, Search, Upload, Mic, Send,
   Plus, Sparkles, Brain, Database, Clock, ChevronDown, Shield,
