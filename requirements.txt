@@ -30,3 +30,4 @@ redis
 openai
 anthropic
 google-generativeai
+motor

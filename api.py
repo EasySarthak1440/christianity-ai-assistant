@@ -130,6 +130,14 @@ async def _init_app():
             else:
                 print("No documents found — upload one via the UI.")
 
+    from mongo_db import is_mongo_available, ensure_indexes
+    if is_mongo_available():
+        try:
+            await ensure_indexes()
+            print("[MongoDB] Indexes ready.")
+        except Exception as e:
+            print(f"[MongoDB] Index setup failed: {e}")
+
     _ready = True
     print("[Gateway] Startup complete — ready to serve requests.")
 
@@ -433,6 +441,10 @@ def _save_trace(query_id: str, trace: dict) -> None:
     path = os.path.join(_TRACES_DIR, f"{query_id}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, indent=2, default=str)
+    from mongo_db import is_mongo_available, save_trace as mongo_save
+    if is_mongo_available():
+        import asyncio
+        asyncio.ensure_future(mongo_save(query_id, trace))
 
 # ── debug + cache (admin only) ──────────────────────────────
 
@@ -446,6 +458,12 @@ def debug_query(query_id: str, user: User = Depends(_require_user)):
         if os.path.exists(trace_path):
             with open(trace_path, encoding="utf-8") as f:
                 return json.load(f)
+        from mongo_db import is_mongo_available, get_trace as mongo_get
+        if is_mongo_available():
+            import asyncio
+            doc = asyncio.run(mongo_get(query_id))
+            if doc:
+                return doc
         return {"error": f"query_id '{query_id}' not found."}
     return entry
 
@@ -461,6 +479,31 @@ def cache_invalidate(user: User = Depends(_require_user)):
         raise HTTPException(status_code=403, detail="Admin only.")
     _cache.invalidate()
     return {"message": "Cache cleared."}
+
+# ── analytics (admin only, requires MongoDB) ─────────────────
+
+class AnalyticsQuery(BaseModel):
+    user: str | None = None
+    intent: str | None = None
+    days: int = 7
+    limit: int = 50
+
+@app.post("/analytics")
+async def query_analytics(
+    params: AnalyticsQuery,
+    user: User = Depends(_require_user),
+):
+    if user.role != Role.admin:
+        raise HTTPException(status_code=403, detail="Admin only.")
+    from mongo_db import is_mongo_available, get_analytics
+    if not is_mongo_available():
+        return {"error": "MongoDB not configured. Set MONGO_URL env var."}
+    return await get_analytics(
+        user=params.user,
+        intent=params.intent,
+        days=params.days,
+        limit=params.limit,
+    )
 
 # ── task status ──────────────────────────────────────────────
 

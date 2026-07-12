@@ -1,8 +1,10 @@
 import os
 import json
 from datetime import datetime, timezone
+import asyncio
 
 _AUDIT_PATH = "data/audit.log"
+_MONGO_MODE = os.environ.get("MONGO_URL", "") != ""
 
 
 def log_query(
@@ -27,3 +29,10 @@ def log_query(
     }
     with open(_AUDIT_PATH, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
+
+    if _MONGO_MODE:
+        try:
+            from mongo_db import log_audit_entry
+            asyncio.ensure_future(log_audit_entry(entry))
+        except Exception:
+            pass

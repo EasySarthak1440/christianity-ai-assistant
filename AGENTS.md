@@ -18,6 +18,7 @@ cd frontend && npm start
 - `pip install -r requirements.txt` now includes all deps
 - `HF_API_TOKEN` env var (or `.env` file) required for image generation in `image_generator.py:85` (uses Hugging Face Inference API via `huggingface_hub`)
 - NLTK `punkt` + `punkt_tab` downloaded automatically on first `import chunker`
+- `MONGO_URL` env var (optional, e.g. `mongodb://localhost:27017`) enables MongoDB for audit log + trace persistence + `/analytics` endpoint. Without it, flat-file mode (`data/audit.log` + `data/traces/`) is used.
 
 ## Default Users (seeded to `data/users.json` on first `auth.py` import)
 
@@ -127,6 +128,12 @@ OPENAI_API_KEY=your_key \
 ANTHROPIC_API_KEY=your_key \
 GOOGLE_API_KEY=your_key \
 docker compose up -d
+
+# With Ollama as fallback (install Ollama first: ollama.com)
+GROQ_API_KEY=your_key \
+LLM_FALLBACK_CHAIN=ollama \
+OLLAMA_URL=http://host.docker.internal:11434 \
+docker compose up -d
 ```
 
 ## Multi-LLM Provider Layer
@@ -139,11 +146,13 @@ docker compose up -d
 | OpenAI | `OpenAIProvider` | `OPENAI_API_KEY`, `OPENAI_MODEL` (default: `gpt-4o`) |
 | Gemini | `GeminiProvider` | `GOOGLE_API_KEY`, `GEMINI_MODEL` (default: `gemini-2.0-flash`) |
 | Claude | `ClaudeProvider` | `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` (default: `claude-sonnet-4-20250514`) |
+| Ollama | `OllamaProvider` | `OLLAMA_URL` (default: `http://localhost:11434`), `OLLAMA_MODEL` (default: `llama3.2`), `OLLAMA_TIMEOUT` (default: `120`s) |
 
 - Provider selected via `LLM_PROVIDER` env var (default: `groq`).
-- Fallback chain via `LLM_FALLBACK_CHAIN` (comma-separated, e.g. `openai,claude`).
+- Fallback chain via `LLM_FALLBACK_CHAIN` (comma-separated, e.g. `openai,claude,ollama`).
 - If primary rate-limits or fails, each fallback is tried in order.
 - `llm.py` now delegates to the provider abstraction — all existing code works unchanged.
+- **Ollama as fallback**: Set `LLM_PROVIDER=groq` and `LLM_FALLBACK_CHAIN=ollama` — Groq handles 99% of traffic at ~0.5s, Ollama kicks in only when Groq rate-limits. Ideal for local GPU setups or air-gapped deployments.
 
 ## Event-Driven Architecture
 

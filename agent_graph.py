@@ -52,6 +52,10 @@ def _save_trace(query_id: str, trace: dict) -> None:
     path = os.path.join(_TRACES_DIR, f"{query_id}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, indent=2, default=str)
+    from mongo_db import is_mongo_available, save_trace as mongo_save
+    if is_mongo_available():
+        import asyncio
+        asyncio.ensure_future(mongo_save(query_id, trace))
 
 
 def self_rag_gate_node(state: AgentState, _config=None) -> dict:

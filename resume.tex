@@ -1,0 +1,103 @@
+\documentclass[9.5pt,a4paper]{article}
+\usepackage[top=0.25in,bottom=0.2in,left=0.5in,right=0.5in]{geometry}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\definecolor{accent}{RGB}{20,60,110}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+\titleformat{\section}{\normalsize\bfseries\color{accent}}{}{0em}{}[\titlerule]
+\titlespacing{\section}{0pt}{5pt}{3pt}
+\setlist{nosep}
+\setlength{\baselineskip}{0.97\baselineskip}
+
+\hypersetup{colorlinks=true, urlcolor=accent, linkcolor=accent}
+
+\newcommand{\resumeItem}[1]{\item[--] #1}
+\newcommand{\resumeEntry}[4]{
+  \textbf{#1} \hfill #2 \\
+  \textit{#3} \hfill \textit{#4}
+}
+
+\begin{document}
+
+\begin{center}
+{\huge \bfseries Sarthak Kelkar} \\[2pt]
+Pune, Maharashtra, India \\[1pt]
+kelkarsarthak2002@gmail.com \quad
+8459096633 \quad
+\href{https://linkedin.com/in/sarthak-kelkar-a9a796204}{linkedin.com/in/sarthak-kelkar-a9a796204} \quad
+\href{https://github.com/EasySarthak1440}{github.com/EasySarthak1440}
+\end{center}
+
+\vspace{-10pt}
+\section*{Summary}
+AI Engineer with 1.5+ years building production computer vision, RAG, and LLM systems end-to-end. Experienced in microservices decomposition, event-driven architectures, and multi-LLM provider integration with automatic failover. Hands-on with LangGraph multi-agent orchestration, Docker containerization, and cloud infrastructure (AWS/Azure). Strong DSA foundation (380+ LeetCode). Currently leading applied AI projects and mentoring engineers at a Pune-based AI agency.
+
+\section*{Experience}
+\resumeEntry{AI Engineer -- XuanLabs}{2026 -- Present}{Pune, India (AI Software Agency)}{}
+\begin{itemize}[leftmargin=14pt, itemsep=1pt, topsep=2pt]
+  \resumeItem{Lead applied AI development for a LangGraph-based 9-agent Medical AI Assistant pipeline, covering agent design, orchestration, and evaluation.}
+  \resumeItem{Drive product planning and technical execution for EduPrep, a React Native / Expo LMS backed by Supabase (PostgreSQL) with row-level security.}
+  \resumeItem{Manage and mentor a 2-person engineering team (AI + DevOps interns) and lead technical hiring interviews.}
+\end{itemize}
+
+\resumeEntry{AI Software Developer I -- Constems-AI Systems}{Apr 2025 -- Dec 2025}{Pune, India}{}
+\begin{itemize}[leftmargin=14pt, itemsep=1pt, topsep=2pt]
+  \resumeItem{Built and shipped production computer vision pipelines: Vision Transformer classifier at 99.6\% accuracy and a ResNet model improved from 70\% to 99\%+ accuracy.}
+  \resumeItem{Deployed a LLaMA-3-based OCR pipeline on H100 GPUs achieving 90\% field-extraction accuracy on production documents.}
+  \resumeItem{Built a PaddleOCR chassis-number extraction system (95\%+) and YOLO stencil shape-matching (96\%) with DINOv2 clustering for defect grouping.}
+  \resumeItem{Delivered a 180-class channel-play classification model at 98\% accuracy, from prototype to production.}
+\end{itemize}
+
+\resumeEntry{AI Product Intern -- Constems-AI Systems}{Oct 2024 -- Mar 2025}{Pune, India}{}
+\begin{itemize}[leftmargin=14pt, itemsep=1pt, topsep=2pt]
+  \resumeItem{Prototyped and validated the channel-play classification approach (180 classes), later taken to production; supported model evaluation and dataset curation.}
+\end{itemize}
+
+\section*{Projects}
+\resumeEntry{Enterprise RAG Knowledge Assistant}{}{}{\href{https://github.com/EasySarthak1440/christianity-ai-assistant}{github.com/EasySarthak1440/christianity-ai-assistant}}
+\begin{itemize}[leftmargin=14pt, itemsep=1pt, topsep=2pt]
+  \resumeItem{Decomposed a monolithic RAG system into 6 microservices (gateway, document store, LLM, bible, upload, agent) with HTTP delegation, containerized via Docker Compose (8 containers).}
+  \resumeItem{Implemented event-driven architecture with an in-process pub/sub event bus and Celery/Redis async task queue for background document ingestion.}
+  \resumeItem{Designed a pluggable multi-LLM provider layer (Groq, OpenAI, Gemini, Claude) with automatic fallback on rate-limit or failure; served via FastAPI.}
+  \resumeItem{Integrated LangGraph (8-node agent graph) and CrewAI (3-agent sequential pipeline) for agentic query orchestration with MemorySaver checkpointing.}
+  \resumeItem{Built a shared internal library (\texttt{enterprise\_rag\_core}) used across all services with reusable vector store, chunker, and LLM provider abstractions.}
+\end{itemize}
+
+\resumeEntry{RAG AI Knowledge Assistant}{}{}{\href{https://github.com/EasySarthak1440/rag-ai-knowledge-assistant}{github.com/EasySarthak1440/rag-ai-knowledge-assistant}}
+\begin{itemize}[leftmargin=14pt, itemsep=1pt, topsep=2pt]
+  \resumeItem{Built a multi-PDF RAG assistant with FastAPI + React, FAISS retrieval with cross-encoder reranking, Groq LLaMA-4 generation, and n8n workflow integration.}
+\end{itemize}
+
+\resumeEntry{Autonomous Agent Framework}{}{}{\href{https://github.com/EasySarthak1440/autonomous_agent}{github.com/EasySarthak1440/autonomous\_agent}}
+\begin{itemize}[leftmargin=14pt, itemsep=1pt, topsep=1pt]
+  \resumeItem{ReAct-loop agent framework with a 10-tool registry, FastAPI service layer, and Ollama/Groq model backends.}
+\end{itemize}
+
+\section*{Skills}
+\textbf{Languages:} Python, SQL \\
+\textbf{Backend \& Architecture:} FastAPI, REST API design, microservices decomposition, event-driven architecture (pub/sub, Celery/Redis), multi-LLM provider integration (Groq, OpenAI, Gemini, Claude, Vertex AI), JWT/RBAC auth \\
+\textbf{Containerization \& Cloud:} Docker, Docker Compose, AWS (EC2, S3), Azure, Linux, CI/CD \\
+\textbf{RAG \& Retrieval:} Hybrid search (FAISS + BM25), RRF, cross-encoder reranking, RAGAS evaluation, proposition chunking, HyDE, multi-query retrieval \\
+\textbf{Agent Frameworks:} LangGraph (multi-agent graphs, MemorySaver), CrewAI, ReAct agents \\
+\textbf{Async \& Task Queues:} Celery, Redis, asyncio \\
+\textbf{ML/DL Frameworks:} PyTorch, scikit-learn, LangChain, LlamaIndex \\
+\textbf{Computer Vision:} ViT, ResNet, YOLO, DINOv2 (embeddings + clustering), classification, object detection \\
+\textbf{OCR:} PaddleOCR, LLM-based OCR (LLaMA-3/4 on GPU) \\
+\textbf{LLMs \& Fine-tuning:} Groq LLaMA-4, LoRA/QLoRA, prompt engineering, agentic pipelines \\
+\textbf{Frontend:} React, React Native (Expo) \\
+\textbf{Databases:} Supabase/PostgreSQL, row-level security \\
+\textbf{Problem Solving:} 380+ LeetCode problems solved
+
+\section*{Education}
+B.E. in Artificial Intelligence and Data Science -- Savitribai Phule Pune University (CGPA: 8.5) \hfill 2020 -- 2024
+
+\section*{Certifications}
+Generative AI with LangChain \& HuggingFace (Udemy) \quad|\quad Machine Learning with Python (FreeCodeCamp) \quad|\quad Complete Python Programming (Unwired Learning)
+
+\end{document}

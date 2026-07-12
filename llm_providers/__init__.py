@@ -8,12 +8,14 @@ from llm_providers.groq_provider import GroqProvider
 from llm_providers.openai_provider import OpenAIProvider
 from llm_providers.gemini_provider import GeminiProvider
 from llm_providers.claude_provider import ClaudeProvider
+from llm_providers.ollama_provider import OllamaProvider
 
 PROVIDER_REGISTRY: dict[str, type[LLMProvider]] = {
     "groq": GroqProvider,
     "openai": OpenAIProvider,
     "gemini": GeminiProvider,
     "claude": ClaudeProvider,
+    "ollama": OllamaProvider,
 }
 
 
