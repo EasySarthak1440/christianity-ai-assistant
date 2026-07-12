@@ -1,15 +1,15 @@
 from __future__ import annotations
-import os
+
 import json
-import uuid
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
 import jwt
 
-from models.user import User
 from models.role import Role
+from models.user import User
 
 _DATA_DIR = "data"
 _USERS_PATH = os.path.join(_DATA_DIR, "users.json")

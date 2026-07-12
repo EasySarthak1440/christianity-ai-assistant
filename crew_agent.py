@@ -1,16 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, List
 
-from crewai import Agent, Task, Crew, Process, LLM
+from crewai import LLM, Agent, Crew, Process, Task
 
 from vector_store import VectorStore
-from smart_retriever import retrieve
-from context_builder import build_context, build_sources_summary
-from prompt import build_prompt
-from llm import generate_answer
-from similarity_scorer import score_answer
 
 
 class RAGCrew:

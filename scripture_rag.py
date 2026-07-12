@@ -1,12 +1,11 @@
-import os
 import json
-import re
+import os
 import pickle
+import re
 import urllib.request
 from typing import Optional
 
 import faiss
-import numpy as np
 
 from shared_model import get_embedding_model
 

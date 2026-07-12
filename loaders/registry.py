@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from loaders.csv_loader import load_csv

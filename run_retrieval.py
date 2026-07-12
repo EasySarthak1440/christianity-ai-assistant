@@ -1,7 +1,8 @@
 import os
 import sys
-from vector_store import VectorStore
+
 from ingest import ingest_pdfs
+from vector_store import VectorStore
 
 DATA_DIR = "data"
 INDEX_PATH = os.path.join(DATA_DIR, "index")

@@ -1,10 +1,10 @@
 from __future__ import annotations
-import os
+
 import json
+import os
 from typing import Optional
 
 from models.user import User
-from models.role import Role
 
 _DATA_DIR = "data"
 _POLICY_PATH = os.path.join(_DATA_DIR, "access_policies.json")

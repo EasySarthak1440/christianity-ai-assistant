@@ -1,8 +1,9 @@
-import nltk
+import nltk  # noqa: E402
+from nltk.tokenize import sent_tokenize  # noqa: E402
+
 nltk.download("punkt", quiet=True)
 nltk.download("punkt_tab", quiet=True)
 
-from nltk.tokenize import sent_tokenize
 
 # used in ingest.py - small to big chunker
 def smart_chunk(

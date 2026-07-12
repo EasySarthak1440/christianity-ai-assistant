@@ -34,7 +34,7 @@ def ingest_document(
 
 @celery_app.task(bind=True)
 def rebuild_bible_index(self) -> dict:
-    from scripture_rag import ScriptureStore, BIBLE_JSON_URL
+    from scripture_rag import BIBLE_JSON_URL, ScriptureStore
 
     store = ScriptureStore()
     store.build_index(BIBLE_JSON_URL)

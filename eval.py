@@ -1,4 +1,3 @@
-import numpy as np
 import argparse
 import json
 import os
@@ -6,11 +5,12 @@ import sys
 import warnings
 from datetime import datetime
 
-warnings.filterwarnings("ignore")
+import numpy as np
 
-from vector_store import VectorStore
 from rag_pipeline import run_rag
-from context_builder import build_context
+from vector_store import VectorStore
+
+warnings.filterwarnings("ignore")
 
 GOLDEN_PATH = "data/golden.json"
 INDEX_PATH  = "data/index"
@@ -53,8 +53,8 @@ def _build_judge_llm():
     Requires: pip install langchain-groq
     """
     try:
-        from ragas.llms import LangchainLLMWrapper
         from langchain_groq import ChatGroq
+        from ragas.llms import LangchainLLMWrapper
     except ImportError:
         print("[eval] Missing dep. Run: pip install langchain-groq")
         sys.exit(1)
@@ -81,8 +81,8 @@ def _build_judge_embeddings():
     Requires: pip install langchain-huggingface sentence-transformers
     """
     try:
-        from ragas.embeddings import LangchainEmbeddingsWrapper
         from langchain_huggingface import HuggingFaceEmbeddings
+        from ragas.embeddings import LangchainEmbeddingsWrapper
     except ImportError:
         print("[eval] Missing dep. Run: pip install langchain-huggingface sentence-transformers")
         sys.exit(1)
@@ -94,14 +94,14 @@ def _build_judge_embeddings():
 
 def run_eval(output_path: str | None = None) -> None:
     try:
+        from datasets import Dataset
         from ragas import evaluate
         from ragas.metrics import (
-            faithfulness,
             answer_relevancy,
             context_precision,
             context_recall,
+            faithfulness,
         )
-        from datasets import Dataset
     except ImportError:
         print("[eval] Missing dependencies. Run: pip install ragas datasets")
         sys.exit(1)
@@ -110,8 +110,9 @@ def run_eval(output_path: str | None = None) -> None:
 
     vs = VectorStore()
     if not vs.load(INDEX_PATH):
-        from ingestion_manager import ingest_file
         from pathlib import Path
+
+        from ingestion_manager import ingest_file
         _SUPPORTED = {".pdf", ".csv", ".json"}
         docs = [
             os.path.join(DATA_DIR, f)

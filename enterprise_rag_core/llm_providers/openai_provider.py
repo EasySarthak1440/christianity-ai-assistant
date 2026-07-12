@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 from openai import OpenAI
 
 from enterprise_rag_core.llm_providers.base import LLMProvider

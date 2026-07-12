@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+
 from dotenv import load_dotenv
 
-from llm_providers import get_provider, get_fallback_chain
+from llm_providers import get_fallback_chain, get_provider
 from llm_providers.base import RateLimitFallbackError
 
 load_dotenv()

@@ -1,9 +1,10 @@
-from vector_store import VectorStore
-from smart_retriever import retrieve
 from context_builder import build_context
-from prompt import build_prompt
 from llm import generate_answer
+from prompt import build_prompt
 from similarity_scorer import score_answer
+from smart_retriever import retrieve
+from vector_store import VectorStore
+
 
 # (answer_str, results_list) | results_list carries { chunk, score, source, page, chunk_id }
 def run_rag(

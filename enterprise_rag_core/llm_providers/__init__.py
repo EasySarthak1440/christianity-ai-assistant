@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 
 from enterprise_rag_core.llm_providers.base import LLMProvider
-from enterprise_rag_core.llm_providers.groq_provider import GroqProvider
-from enterprise_rag_core.llm_providers.openai_provider import OpenAIProvider
-from enterprise_rag_core.llm_providers.gemini_provider import GeminiProvider
 from enterprise_rag_core.llm_providers.claude_provider import ClaudeProvider
+from enterprise_rag_core.llm_providers.gemini_provider import GeminiProvider
+from enterprise_rag_core.llm_providers.groq_provider import GroqProvider
 from enterprise_rag_core.llm_providers.ollama_provider import OllamaProvider
+from enterprise_rag_core.llm_providers.openai_provider import OpenAIProvider
 
 PROVIDER_REGISTRY: dict[str, type[LLMProvider]] = {
     "groq": GroqProvider,

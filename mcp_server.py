@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
 

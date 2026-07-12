@@ -1,23 +1,23 @@
 from __future__ import annotations
 
+import json
 import os
 import uuid
-import json
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import List, Optional, TypedDict
 
-from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, StateGraph
 
-from vector_store import VectorStore
-from smart_retriever import retrieve
-from context_builder import build_context, build_sources_summary
-from prompt import build_prompt
-from llm import generate_answer
-from similarity_scorer import score_answer
-from query_router import classify_query, get_retrieval_config
-from sensitivity_detector import contains_pii, redact_pii, is_high_risk_query
-from cache import SemanticCache
 from audit_logger import log_query
+from cache import SemanticCache
+from context_builder import build_context, build_sources_summary
+from llm import generate_answer
+from prompt import build_prompt
+from query_router import classify_query, get_retrieval_config
+from sensitivity_detector import contains_pii, redact_pii
+from similarity_scorer import score_answer
+from smart_retriever import retrieve
+from vector_store import VectorStore
 
 _GREET_TOKENS = {"hi", "hello", "hey", "thanks", "thank", "bye", "help", "what", "who", "are", "you"}
 _TRACES_DIR = "data/traces"
@@ -52,7 +52,8 @@ def _save_trace(query_id: str, trace: dict) -> None:
     path = os.path.join(_TRACES_DIR, f"{query_id}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, indent=2, default=str)
-    from mongo_db import is_mongo_available, save_trace as mongo_save
+    from mongo_db import is_mongo_available
+    from mongo_db import save_trace as mongo_save
     if is_mongo_available():
         import asyncio
         asyncio.ensure_future(mongo_save(query_id, trace))
@@ -98,8 +99,8 @@ def cache_check_node(state: AgentState, _config=None) -> dict:
 def rbac_filter_node(state: AgentState, _config=None) -> dict:
     all_sources = _get_vs().list_sources()
     from access_policy import resolve_permitted_sources
-    from models.user import User
     from models.role import Role
+    from models.user import User
     user = User(id="", username=state["username"], password_hash="", role=Role(state["user_role"]), department="")
     permitted = resolve_permitted_sources(user, all_sources)
     if not permitted:

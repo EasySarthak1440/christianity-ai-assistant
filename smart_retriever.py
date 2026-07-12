@@ -1,10 +1,11 @@
-import os
 import concurrent.futures
+import os
+
 from groq import Groq
 
-from vector_store import VectorStore
-from reranker import rerank
 from filter import filter_chunks
+from reranker import rerank
+from vector_store import VectorStore
 
 _groq = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 _RRF_K = 60
@@ -27,7 +28,7 @@ def _generate_query_variants(query: str) -> list[str]:
             temperature=0.4,
             max_tokens=120,
         )
-        lines = [l.strip() for l in resp.choices[0].message.content.strip().splitlines() if l.strip()]
+        lines = [line.strip() for line in resp.choices[0].message.content.strip().splitlines() if line.strip()]
         variants = lines[:2]
         return [query] + variants
     except Exception as e:

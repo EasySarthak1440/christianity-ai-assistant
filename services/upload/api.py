@@ -3,9 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
 
 app = FastAPI(title="Upload Service", version="0.2.0")
 
@@ -61,8 +60,8 @@ async def upload_file(
             "async": True,
         }
 
-    from ingestion_manager import ingest_file
     from enterprise_rag_core.event_bus import get_event_bus
+    from ingestion_manager import ingest_file
 
     if _use_remote_vs:
         import httpx
@@ -93,9 +92,9 @@ async def upload_file(
 
 
 def _ingest_locally(file_path: str, owner: str, classification: str) -> tuple[int, list[dict]]:
-    from loaders import load_file
-    from cleaner import clean_text
     from chunker import smart_chunk
+    from cleaner import clean_text
+    from loaders import load_file
 
     pages = load_file(file_path)
     source = Path(file_path).name

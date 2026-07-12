@@ -1,6 +1,4 @@
 import re
-import os
-from typing import Optional
 
 _PII_PATTERNS = [
     ("ssn", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),

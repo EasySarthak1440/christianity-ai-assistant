@@ -4,11 +4,11 @@ import os
 from typing import Optional
 
 from llm_providers.base import LLMProvider
-from llm_providers.groq_provider import GroqProvider
-from llm_providers.openai_provider import OpenAIProvider
-from llm_providers.gemini_provider import GeminiProvider
 from llm_providers.claude_provider import ClaudeProvider
+from llm_providers.gemini_provider import GeminiProvider
+from llm_providers.groq_provider import GroqProvider
 from llm_providers.ollama_provider import OllamaProvider
+from llm_providers.openai_provider import OpenAIProvider
 
 PROVIDER_REGISTRY: dict[str, type[LLMProvider]] = {
     "groq": GroqProvider,

@@ -1,7 +1,8 @@
-from pdf_loader import load_pdfs
-from cleaner import clean_text
 from chunker import smart_chunk
+from cleaner import clean_text
+from pdf_loader import load_pdfs
 from vector_store import VectorStore
+
 
 # return quantity(chunk-indixed) in vector store
 def ingest_pdfs(file_paths: list[str], vector_store: VectorStore) -> int:

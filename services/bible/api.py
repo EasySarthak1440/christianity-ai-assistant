@@ -55,7 +55,7 @@ async def startup():
         except Exception as e:
             print(f"[Bible] Index build failed: {e}")
 
-    from denomination_prompts import get_system_prompt, get_denominations
+    from denomination_prompts import get_denominations
     _SYSTEM_PROMPTS = {"general", "catholic", "orthodox", "protestant"}
     _DENOMINATION_LIST = get_denominations()
 
@@ -173,10 +173,9 @@ async def query(req: BibleQueryRequest):
         except Exception:
             pass
     else:
-        from vector_store import VectorStore
-        from rag_pipeline import run_rag
-        from access_policy import resolve_permitted_sources
         from context_builder import build_context
+        from rag_pipeline import run_rag
+        from vector_store import VectorStore
         try:
             vs = VectorStore()
             vs.load("data/index")
@@ -258,7 +257,8 @@ async def generate_image(req: ImageGenRequest):
     p = req.prompt.strip()
     if not p:
         return {"error": "Prompt is required."}
-    from image_generator import validate_prompt as validate_image_prompt, generate_image as gen_img
+    from image_generator import generate_image as gen_img
+    from image_generator import validate_prompt as validate_image_prompt
     validation = validate_image_prompt(p)
     if not validation["allowed"]:
         return {"allowed": False, "reason": validation["reason"], "message": validation["safe_response"]}

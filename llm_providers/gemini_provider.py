@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 import google.generativeai as genai
 
 from llm_providers.base import LLMProvider

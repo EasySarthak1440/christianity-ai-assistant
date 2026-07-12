@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from loaders import load_file
-from cleaner import clean_text
 from chunker import smart_chunk
+from cleaner import clean_text
+from loaders import load_file
 from vector_store import VectorStore
 
 

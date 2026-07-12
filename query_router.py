@@ -1,5 +1,6 @@
-import os
 import json
+import os
+
 from groq import Groq
 
 _groq = Groq(api_key=os.environ.get("GROQ_API_KEY"))

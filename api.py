@@ -1,42 +1,42 @@
 from __future__ import annotations
-import re
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
-from ingestion_manager import ingest_file
-from vector_store import VectorStore
-from rag_pipeline import run_rag
-from context_builder import build_sources_summary
-from cache import SemanticCache
-from auth import authenticate, create_token, decode_token
-from access_policy import resolve_permitted_sources
-from query_router import classify_query, get_retrieval_config
-from sensitivity_detector import contains_pii, redact_pii, is_high_risk_query
-from audit_logger import log_query
-from models.user import User
-from models.role import Role
-from pathlib import Path
+
+import json
 import os
+import re
 import shutil
 import uuid
-import json
+from pathlib import Path
 
-from agent_graph import create_agent_graph
-from mcp_server import setup_mcp_server
-from crew_agent import RAGCrew
-from event_bus import get_event_bus
 from celery.result import AsyncResult
-from tasks import ingest_document
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
-from scripture_rag import ScriptureStore, BIBLE_JSON_URL
-from moderation import moderation_check
-from denomination_prompts import get_system_prompt, get_denominations, validate_denomination
-from image_generator import validate_prompt as validate_image_prompt, generate_image
-from prompt import build_prompt
+from access_policy import resolve_permitted_sources
+from agent_graph import create_agent_graph
+from audit_logger import log_query
+from auth import authenticate, create_token, decode_token
+from cache import SemanticCache
+from context_builder import build_sources_summary
+from crew_agent import RAGCrew
+from denomination_prompts import get_denominations, get_system_prompt, validate_denomination
+from event_bus import get_event_bus
+from gateway_clients import RemoteVectorStore, is_remote_llm, is_remote_vs, remote_generate
+from image_generator import generate_image
+from image_generator import validate_prompt as validate_image_prompt
+from ingestion_manager import ingest_file
 from llm import generate_answer
-
-from gateway_clients import RemoteVectorStore, remote_generate, is_remote_vs, is_remote_llm
+from mcp_server import setup_mcp_server
+from models.role import Role
+from models.user import User
+from moderation import moderation_check
+from query_router import classify_query, get_retrieval_config
+from rag_pipeline import run_rag
+from scripture_rag import BIBLE_JSON_URL, ScriptureStore
+from sensitivity_detector import contains_pii, is_high_risk_query, redact_pii
+from tasks import ingest_document
+from vector_store import VectorStore
 
 app = FastAPI()
 _security = HTTPBearer(auto_error=False)
@@ -130,7 +130,7 @@ async def _init_app():
             else:
                 print("No documents found — upload one via the UI.")
 
-    from mongo_db import is_mongo_available, ensure_indexes
+    from mongo_db import ensure_indexes, is_mongo_available
     if is_mongo_available():
         try:
             await ensure_indexes()
@@ -298,7 +298,7 @@ def query_endpoint(
 
     # Pre-query PII / high-risk guard
     pii_in_query = contains_pii(request.query)
-    risky = is_high_risk_query(request.query)
+    is_high_risk_query(request.query)
 
     # Full RAG run
     try:
@@ -441,7 +441,8 @@ def _save_trace(query_id: str, trace: dict) -> None:
     path = os.path.join(_TRACES_DIR, f"{query_id}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, indent=2, default=str)
-    from mongo_db import is_mongo_available, save_trace as mongo_save
+    from mongo_db import is_mongo_available
+    from mongo_db import save_trace as mongo_save
     if is_mongo_available():
         import asyncio
         asyncio.ensure_future(mongo_save(query_id, trace))
@@ -458,7 +459,8 @@ def debug_query(query_id: str, user: User = Depends(_require_user)):
         if os.path.exists(trace_path):
             with open(trace_path, encoding="utf-8") as f:
                 return json.load(f)
-        from mongo_db import is_mongo_available, get_trace as mongo_get
+        from mongo_db import get_trace as mongo_get
+        from mongo_db import is_mongo_available
         if is_mongo_available():
             import asyncio
             doc = asyncio.run(mongo_get(query_id))
@@ -495,7 +497,7 @@ async def query_analytics(
 ):
     if user.role != Role.admin:
         raise HTTPException(status_code=403, detail="Admin only.")
-    from mongo_db import is_mongo_available, get_analytics
+    from mongo_db import get_analytics, is_mongo_available
     if not is_mongo_available():
         return {"error": "MongoDB not configured. Set MONGO_URL env var."}
     return await get_analytics(

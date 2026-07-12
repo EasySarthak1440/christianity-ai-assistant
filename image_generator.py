@@ -1,5 +1,6 @@
 import os
 import re
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -88,9 +89,10 @@ def generate_image(prompt: str) -> dict:
             "message": "Image generation is not available — no HF_API_TOKEN configured.",
         }
     try:
-        from huggingface_hub import InferenceClient
         import base64
         from io import BytesIO
+
+        from huggingface_hub import InferenceClient
 
         client = InferenceClient(token=hf_token, timeout=120)
         image = client.text_to_image(

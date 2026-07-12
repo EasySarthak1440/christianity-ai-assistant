@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 from enterprise_rag_core.models.role import Role
 
 

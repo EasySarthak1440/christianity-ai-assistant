@@ -1,5 +1,7 @@
 from sentence_transformers import util
+
 from shared_model import get_embedding_model
+
 
 # returns 'chunk', 'source', 'page'
 def score_answer(answer: str, results: list[dict]) -> dict:

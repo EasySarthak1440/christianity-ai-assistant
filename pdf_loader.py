@@ -1,5 +1,7 @@
-import pypdf
 from pathlib import Path
+
+import pypdf
+
 
 def load_pdf(file_path: str) -> list[dict]:
     pages = []

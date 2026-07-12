@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 from groq import Groq, RateLimitError
 
 from enterprise_rag_core.llm_providers.base import LLMProvider, RateLimitFallbackError

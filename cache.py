@@ -1,5 +1,7 @@
 import numpy as np
+
 from shared_model import get_embedding_model
+
 
 class SemanticCache:
     def __init__(self, threshold: float = 0.95, max_size: int = 512):

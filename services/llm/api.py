@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from enterprise_rag_core.llm_providers import get_provider, get_fallback_chain
+from enterprise_rag_core.llm_providers import get_fallback_chain, get_provider
 from enterprise_rag_core.llm_providers.base import RateLimitFallbackError
 
 app = FastAPI(title="LLM Service", version="0.2.0")
