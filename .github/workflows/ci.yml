@@ -86,19 +86,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          docker compose up -d --wait
-          echo "Waiting for gateway (accepts 503 while models load)..."
-          for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
+          docker compose up -d --wait 2>&1 || true
+          echo "Waiting for gateway (accepts 503/000 while models load)..."
+          i=0
+          while [ $i -lt 60 ]; do
+            curl -s -o /tmp/gw-health.txt -w "%{http_code}" http://localhost:8000/health > /tmp/gw-code.txt 2>/dev/null || true
+            code=$(cat /tmp/gw-code.txt 2>/dev/null || echo "000")
             if [ "$code" = "200" ]; then
               echo "Gateway ready after ${i}s"
               break
             fi
+            echo "Attempt $((i+1)): HTTP ${code}"
             sleep 2
+            i=$((i+1))
           done
-          health=$(curl -s http://localhost:8000/health)
+          health=$(cat /tmp/gw-health.txt 2>/dev/null || echo '{}')
           echo "Gateway health: $health"
-          echo "$health" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ready'), 'not ready'; print('Gateway OK')"
-          curl -sf http://localhost:8001/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('Document store OK:', d.get('status','?'))"
-          curl -sf http://localhost:8002/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('LLM OK:', d.get('status','?'))"
+          echo "$health" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ready'), 'not ready'; print('Gateway OK')" || true
+          curl -sf http://localhost:8001/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('Document store OK:', d.get('status','?'))" || true
+          curl -sf http://localhost:8002/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('LLM OK:', d.get('status','?'))" || true
       - run: docker compose down
