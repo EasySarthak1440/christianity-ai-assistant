@@ -116,7 +116,7 @@ export default function RAGInterface() {
   const fileRef  = useRef(null)
   const msgsRef  = useRef(null)
 
-  const authHeaders = () => token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : {}
+  const authHeaders = useCallback(() => token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : {}, [token])
 
   const handleLogin = async () => {
     setLoginLoading(true); setLoginErr('')
