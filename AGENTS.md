@@ -1,270 +1,177 @@
-# RAG AI Knowledge Assistant
+# AGENTS.md
 
-Enterprise RAG: Python backend (FastAPI + FAISS + Groq) + React frontend. Supports PDF, CSV, and JSON ingestion.
-
-## Commands
+## Quick Start
 
 ```bash
-# Terminal 1 — backend (port 8000)
+# Backend (port 8000) — the actual entry point is app.api, NOT api.api
 uvicorn app.api:app --reload --port 8000
 
-# Terminal 2 — frontend (port 3000)
+# Frontend (port 3000)
 cd frontend && npm start
 ```
 
-## Requirements
+## Setup
 
-- `GROQ_API_KEY` env var (or `.env` file) required at import time in `llm.py:6-7`
-- `pip install -r requirements.txt` now includes all deps
-- `HF_API_TOKEN` env var (or `.env` file) required for image generation in `image_generator.py:85` (uses Hugging Face Inference API via `huggingface_hub`)
-- NLTK `punkt` + `punkt_tab` downloaded automatically on first `import chunker`
-- `MONGO_URL` env var (optional, e.g. `mongodb://localhost:27017`) enables MongoDB for audit log + trace persistence + `/analytics` endpoint. Without it, flat-file mode (`data/audit.log` + `data/traces/`) is used.
+```bash
+pip install -r requirements.txt
+```
 
-## Default Users (seeded to `data/users.json` on first `auth.py` import)
+- `GROQ_API_KEY` (or `.env`) required at import time in `rag/llm.py`
+- `HF_API_TOKEN` (or `.env`) required for image generation in `app/image_generator.py:84`
+- `MONGO_URL` (optional, e.g. `mongodb://localhost:27017`) enables MongoDB for audit log + trace persistence + `/analytics`. Without it, flat-file mode (`data/audit.log` + `data/traces/`) is used.
+- NLTK `punkt` + `punkt_tab` downloaded automatically on first `import rag.chunker`
+- JWT secret defaults to `change-me-in-production-use-a-real-secret` (`app/auth.py:16`)
+- `.env` file in repo root — do NOT commit it
 
-| Username   | Password      | Role     |
-|------------|---------------|----------|
-| admin      | admin123      | admin    |
-| manager    | manager123    | manager  |
-| employee   | employee123   | employee |
-| auditor    | auditor123    | auditor  |
+## Key Modules (all live in `rag/`, not root)
+
+| File | Role |
+|---|---|
+| `rag/vector_store.py` | FAISS + BM25 hybrid (RRF fusion: dense 0.6 / sparse 0.4) |
+| `rag/chunker.py` | Small-to-Big: child 200ch, parent 1500ch, overlap 100ch |
+| `rag/llm.py` | Groq wrapper with rate-limit fallback |
+| `rag/smart_retriever.py` | Multi-query expansion + cross-encoder reranking |
+| `rag/query_router.py` | Intent classification → tunes `top_k`/`rerank` |
+| `rag/pipeline.py` | End-to-end RAG orchestration |
+| `rag/sensitivity_detector.py` | PII detection + redaction |
 
 ## Architecture
 
-- **`enterprise_rag_core/`** — Shared library package (v0.1.0) for microservices. Contains: `models/`, `chunker.py`, `cleaner.py`, `filter.py`, `shared_model.py`, `vector_store.py`, `event_bus.py`, `llm_providers/`. Installed as editable package (`pip install -e ./enterprise_rag_core`). Future services depend on this.
-- `api.py` instantiates a single `VectorStore`. Index persists to `data/index.index` (FAISS) + `data/index.meta` (pickle) — loaded on startup, saved after every upload/delete.
-- `data/` is gitignored; uploaded files live there at runtime.
-- Multi-format ingestion: `loaders/` auto-detects `.pdf`/`.csv`/`.json` and routes to format-specific loader (`loaders/registry.py:8-12`). `ingestion_manager.py:ingest_file()` is the single entrypoint.
-- Chunk metadata includes `format`, `owner`, `classification` (defaults: "unknown", "internal").
-- **RBAC**: `POST /login` returns JWT (HS256, 24h TTL). `JWT_SECRET` defaults to `change-me-in-production-use-a-real-secret` (`auth.py:16`). Protected endpoints require `Authorization: Bearer <token>`.
-- Roles: `admin`, `manager`, `employee`, `auditor`, `compliance` (`models/role.py:5-9`).
-- `access_policy.py` resolves permitted sources via `data/access_policies.json`. Default policy allows `*` role to all sources.
-- `/debug` and `/cache/*` admin-only; `/sources/{filename}` DELETE restricted to admin; `/upload` sets owner from authenticated user.
-- **Retrieval**: FAISS inner-product (dense, 0.6) + BM25 (sparse, 0.4) fused via RRF (`rag/vector_store.py:52-113`). `rag/smart_retriever.py` adds multi-query expansion (LLM generates 2 variants) + cross-encoder reranking (`ms-marco-MiniLM-L-6-v2`).
-- **Chunking**: Small-to-Big: child 200ch, parent 1500ch, overlap 100ch (`chunker.py:8-12`). `parent_text` in metadata, used in context.
-- Context built with Lost-in-the-Middle ordering (`context_builder.py:6-12`), max 4000 chars.
-- Semantic cache (threshold 0.95, max 512 entries, FIFO eviction). Invalidated on `/upload`, `DELETE /sources/{filename}`.
-- Self-RAG gate: ≤4 greeting-like tokens skip retrieval (`app/api.py:162-173`).
-- Query routing: `query_router.py` classifies intent (`fact_lookup`|`summarization`|`comparison`|`cross_source`|`data_analysis`) and tunes `top_k`/`rerank` per intent.
-- Per-query trace persisted to `data/traces/{query_id}.json`; retrieve via `GET /debug/{query_id}` (admin-only). Rolling in-memory log capped at 200 entries.
-- Answer similarity scored vs. chunks (`similarity_scorer.py`): HIGH ≥0.75, MEDIUM ≥0.50.
+- `enterprise_rag_core/` — Shared library (v0.1.0) for microservices; installed as editable (`pip install -e ./enterprise_rag_core`)
+- `app/api.py` — FastAPI app; single `VectorStore` instance; index persists to `data/index.index` + `data/index.meta`
+- `ingestion/ingestion_manager.py:ingest_file()` — single entrypoint for multi-format ingestion (PDF/CSV/JSON auto-detected via `loaders/`)
+- `app/auth.py` — JWT (HS256, 24h TTL) + RBAC; seeds default users to `data/users.json` on first import
+- `app/access_policy.py` — resolves permitted sources via `data/access_policies.json`
+- `app/audit_logger.py` — JSONL audit log with user, intent, PII findings
+- `app/event_bus.py` — in-process pub/sub; events: `document.uploaded`, `document.deleted`, `query.executed`, `cache.invalidated`
+- `app/mcp_server.py` — exposes FastAPI endpoints as MCP tools mounted at `/mcp`
+
+## Endpoints
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `POST /login` | No | Returns JWT |
+| `POST /upload` | JWT | Sets owner from authenticated user; invalidates semantic cache |
+| `POST /query` | JWT | Main RAG query |
+| `POST /agent/query` | JWT | LangGraph or CrewAI pipeline (`agent_framework` field) |
+| `GET /sources` | JWT | List indexed documents |
+| `DELETE /sources/{filename}` | Admin | Delete + rebuild index |
+| `GET /debug/{query_id}` | Admin | Per-query trace |
+| `DELETE /cache` | Admin | Clear semantic cache |
+| `/christianity/*` | JWT | Scripture-grounded endpoints |
+
+## Retrieval Pipeline
+
+Self-RAG gate at `app/api.py:264` — queries with ≤4 greeting-like tokens (`hi`, `hello`, `hey`, `thanks`, `thank`, `bye`, `help`, `what`, `who`, `are`, `you`) skip retrieval entirely. Then: query router → semantic cache (threshold 0.95, max 512, FIFO, invalidated on upload/delete) → hybrid search (FAISS + BM25 fused via RRF) → multi-query expansion + cross-encoder reranking → Lost-in-the-Middle context builder (max 4000 chars) → LLM generation → answer similarity scoring (HIGH ≥0.75, MEDIUM ≥0.50).
 
 ## Guardrails
 
-- PII detection (SSN, credit card, email, phone, IP) in queries and answers — auto-redacts (`sensitivity_detector.py`).
-- High-risk keyword check (`password`, `secret`, `credential`, etc.) flags queries (`is_high_risk_query`).
-- Every query logged to `data/audit.log` (JSONL) with user, intent, PII findings (`app/audit_logger.py`).
+- PII redaction (SSN, credit card, email, phone, IP) in queries and answers (`rag/sensitivity_detector.py`)
+- High-risk keyword flagging (`password`, `secret`, `credential`, etc.)
+- 5-layer pre-LLM moderation in Christianity mode (rewrite detection, hate/extremism, violence justification, adversarial injection, blasphemy)
+- Fake verse detection: verifies `Book N:V` patterns against FAISS (sim threshold 0.6)
+
+## Docker (multi-service, Phase 2)
+
+```bash
+# Full stack with all services
+GROQ_API_KEY=your_key docker compose up -d
+
+# With Ollama fallback
+GROQ_API_KEY=your_key LLM_FALLBACK_CHAIN=ollama docker compose up -d
+```
+
+Services: `gateway` (8000), `worker` (Celery), `document_store` (8001), `llm` (8002), `bible` (8003), `upload` (8004), `agent` (8005), `redis` (6379), `mongo` (27017). All share `data/` volume for FAISS persistence.
+
+## Celery (background tasks)
+
+- `tasks/celery_app.py` + `tasks/tasks.py` — Redis broker/backend
+- `ingest_document` — async file ingestion
+- Run worker: `celery -A tasks worker --loglevel=info`
+- `POST /upload?async=1` dispatches via Celery (returns `task_id`)
+- `GET /tasks/{task_id}` — query task status
+
+## Agent Frameworks
+
+- **LangGraph** (`agents/graph.py`): 8-node stateful graph with conditional edges
+- **CrewAI** (`agents/crew.py`): 3 agents (Research Analyst, Information Synthesizer, Quality Reviewer) — sequential process
+- Both invoked via `POST /agent/query` with `agent_framework` field (`"langgraph"` or `"crewai"`)
+- CrewAI agents call Groq directly via `rag/llm.py` wrapper (not LangChain objects)
+
+## Multi-LLM Provider Layer (`llm_providers/`)
+
+Pluggable providers: Groq (default/fallback), OpenAI, Gemini, Claude, Ollama. Selected via `LLM_PROVIDER` env var; fallback chain via `LLM_FALLBACK_CHAIN` (comma-separated). Ollama as fallback: `LLM_PROVIDER=groq` + `LLM_FALLBACK_CHAIN=ollama`.
 
 ## Evaluation
 
 ```bash
-# Create golden question set template (edit data/golden.json with real Q&A)
+# Create golden question set (writes data/golden.json)
 python eval.py --create-golden
 
 # Run RAGAS evaluation
 python eval.py --output eval-report.json
 ```
 
-- Judge LLM: Groq `llama-3.3-70b-versatile` via `LangchainLLMWrapper` (bypasses instructor — see `eval.py:47-53`). Metrics: faithfulness, answer_relevancy, context_precision, context_recall.
+- Golden set path: `data/golden.json` (not `eval/test_cases.json`)
+- Judge LLM: Groq `llama-3.3-70b-versatile` via `LangchainLLMWrapper` (bypasses instructor — see `eval.py:47-53`)
+- Metrics: faithfulness, answer_relevancy, context_precision, context_recall
 - Requires: `pip install ragas datasets langchain-groq langchain-huggingface`
 
-## Agentic AI (LangGraph Multi-Agent System)
+## CI
 
-- **`agents/graph.py`** — LangGraph stateful agent graph replacing the linear RAG pipeline. 8 nodes with conditional routing:
-
-```
-self_rag_gate → query_router → cache_check → rbac_filter → retrieval_agent → context_builder → answer_generator → output_formatter
-```
-
-- Each node is a pure function operating on `AgentState` (TypedDict). Conditional edges short-circuit to `output_formatter` at gate/cache/RBAC steps when appropriate.
-- The graph is compiled with `MemorySaver` checkpointing and instantiated in `api.py` at startup as `_agent_graph`.
-- New endpoint: `POST /agent/query` — same interface as `/query` but runs through the LangGraph. Accepts optional `agent_framework` field (`"langgraph"` or `"crewai"`).
-
-## MCP (Model Context Protocol)
-
-- **`app/mcp_server.py`** — Wires up `fastapi-mcp` (`FastApiMCP`) to auto-discover all FastAPI endpoints as MCP tools.
-- Mounted at `/mcp` via HTTP transport in `app/api.py:38`.
-- Enables Claude Desktop and other MCP-compatible clients to use RAG tools (query, upload, search, Bible lookup) via the MCP protocol.
-- The MCP server forwards `Authorization` headers from incoming requests to tool invocations automatically.
-
-## CrewAI (Alternative Agent Framework)
-
-- **`agents/crew.py`** — `RAGCrew` class with three CrewAI agents:
-  - `Research Analyst` — retrieves relevant document chunks
-  - `Information Synthesizer` — composes answer from retrieved context
-  - `Quality Reviewer` — verifies accuracy and source attribution
-- Sequential process (`Process.sequential`). Invoked via `POST /agent/query` with `"agent_framework": "crewai"`.
-- Uses Groq `llama-3.3-70b-versatile` as the LLM backend for all agents.
-
-## Requirements (updated)
-
-- `pip install -r requirements.txt` now includes all deps: `langgraph`, `langchain`, `langchain-community`, `crewai`, `crewai-tools`, `python-multipart`, `rank-bm25`, `python-dotenv`, `huggingface-hub`, `ragas`, `datasets`, `langchain-groq`, `langchain-huggingface`, `celery`, `redis`, `openai`, `anthropic`, `google-generativeai`
-
-## Docker
-
-- **`Dockerfile`** — `python:3.11-slim` build. Exposes port 8000.
-- **`docker-compose.yml`** — 8 services:
-
-| Service | Port | Description |
-|---|---|---|
-| `gateway` | 8000 | Current monolith (refactor target for Phase 2d) |
-| `worker` | — | Celery worker |
-| `document_store` | 8001 | FAISS + BM25 vector store (Phase 2b) |
-| `llm` | 8002 | Multi-provider LLM generation (Phase 2c) |
-| `bible` | 8003 | Scripture retrieval (Phase 2e) |
-| `upload` | 8004 | Document ingestion (Phase 2f) |
-| `agent` | 8005 | LangGraph/CrewAI orchestration (Phase 2g) |
-| `redis` | 6379 | Broker + cache |
-
-- `data/` volume mounted for FAISS index persistence across restarts.
-
-```bash
-# Start all services
-GROQ_API_KEY=your_key docker compose up -d
-
-# Or with provider keys for fallback
-GROQ_API_KEY=your_key \
-OPENAI_API_KEY=your_key \
-ANTHROPIC_API_KEY=your_key \
-GOOGLE_API_KEY=your_key \
-docker compose up -d
-
-# With Ollama as fallback (install Ollama first: ollama.com)
-GROQ_API_KEY=your_key \
-LLM_FALLBACK_CHAIN=ollama \
-OLLAMA_URL=http://host.docker.internal:11434 \
-docker compose up -d
-```
-
-## Multi-LLM Provider Layer
-
-- **`llm_providers/`** — Abstract `LLMProvider` interface with pluggable backends:
-
-| Provider | Class | Env Config |
-|---|---|---|
-| Groq (default) | `GroqProvider` | `GROQ_API_KEY`, primary: `llama-3.3-70b-versatile`, fallback: `llama-3.1-8b-instant` |
-| OpenAI | `OpenAIProvider` | `OPENAI_API_KEY`, `OPENAI_MODEL` (default: `gpt-4o`) |
-| Gemini | `GeminiProvider` | `GOOGLE_API_KEY`, `GEMINI_MODEL` (default: `gemini-2.0-flash`) |
-| Claude | `ClaudeProvider` | `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` (default: `claude-sonnet-4-20250514`) |
-| Ollama | `OllamaProvider` | `OLLAMA_URL` (default: `http://localhost:11434`), `OLLAMA_MODEL` (default: `llama3.2`), `OLLAMA_TIMEOUT` (default: `120`s) |
-
-- Provider selected via `LLM_PROVIDER` env var (default: `groq`).
-- Fallback chain via `LLM_FALLBACK_CHAIN` (comma-separated, e.g. `openai,claude,ollama`).
-- If primary rate-limits or fails, each fallback is tried in order.
-- `llm.py` now delegates to the provider abstraction — all existing code works unchanged.
-- **Ollama as fallback**: Set `LLM_PROVIDER=groq` and `LLM_FALLBACK_CHAIN=ollama` — Groq handles 99% of traffic at ~0.5s, Ollama kicks in only when Groq rate-limits. Ideal for local GPU setups or air-gapped deployments.
-
-## Event-Driven Architecture
-
-- **`event_bus.py`** — Lightweight in-process pub/sub event bus.
-- Events: `document.uploaded`, `document.deleted`, `query.executed`, `cache.invalidated`.
-- Emitted at key points in `api.py` — handlers can be registered via `@event_bus.on("event.type")`.
-- Timestamps auto-attached to all payloads.
-
-## Async Task Queue (Celery + Redis)
-
-- **`celery_app.py`** — Celery app configured with Redis broker/backend.
-- **`tasks.py`** — Background tasks:
-  - `ingest_document` — Loads index, ingests file, saves index (avoids blocking API)
-  - `rebuild_bible_index` — Rebuilds the KJV Bible FAISS index
-  - `generate_image_task` — Generates Christian images via HF API
-- **`GET /tasks/{task_id}`** — Query task status (pending/started/success/failure).
-- **`POST /upload?async=1`** — Dispatch ingestion via Celery (returns `task_id` immediately).
-- Run worker: `celery -A tasks worker --loglevel=info`
+- **Python lint**: `ruff check --output-format=github .` (CI: `ruff check --output-format=github .`)
+- **Frontend build**: `cd frontend && npm ci && npm run build --if-present`
+- **Frontend test**: `cd frontend && npm test -- --watchAll=false`
+- **Docker build**: `docker build -t enterprise-rag-gateway .` and per-service builds
+- **Smoke test** (main branch only): starts full compose, polls `/health` on ports 8000/8001/8002
 
 ## Gotchas
 
 - No formal Python lint/test suite — manual verification via UI
-- Groq rate-limit fallback in `llm.py:36-41`: `llama-3.3-70b-versatile` → `llama-3.1-8b-instant` on `RateLimitError`
-- Frontend is Create React App (`react-scripts 5.0.1`); tests via `npm test` in `frontend/`
-- JWT default secret is `change-me-in-production-use-a-real-secret` (`auth.py:16`)
-- `.env` file in this repo contains a real API key — do NOT commit it
-- `agents/crew.py` agents use `llm_config` dict (not LangChain objects) because they call Groq directly via the existing `rag/llm.py` wrapper.
+- Groq rate-limit fallback in `rag/llm.py`: `llama-3.3-70b-versatile` → `llama-3.1-8b-instant` on `RateLimitError`
+- Frontend is Create React App (`react-scripts 5.0.1`); `npm test` runs in watch mode by default — use `--watchAll=false` for CI
+- `data/` is gitignored; uploaded files live there at runtime
+- The `app/` directory contains FastAPI-specific code; `rag/`, `agents/`, `loaders/`, `llm_providers/`, `tasks/`, `ingestion/`, `models/` are shared packages
+- `ingestion/` has both legacy `ingest.py` (PDF-only) and current `ingestion_manager.py` (multi-format) — use the latter
 
-## Microservices Architecture (Phase 2)
+## AWS Deployment (ap-south-1 Mumbai) — STOPPED TO SAVE COSTS
 
-The monolith is being decomposed into 6 microservices + 1 Celery worker + Redis, orchestrated via `docker-compose.yml`.
+> ⚠️ All AWS resources have been stopped/deleted. See instructions below to restore if needed.
 
-### Service Layout
+### Deployment Artifacts (deleted)
 
-```
-services/
-├── document_store/   — FAISS + BM25 index owner (port 8001)
-│   └── api.py        — /search, /add, /sources, /stats
-├── llm/              — Stateless LLM generation (port 8002)
-│   └── api.py        — /generate, /chat
-├── bible/            — Scripture retrieval (port 8003)
-│   └── api.py        — /query, /verify-verse, /denominations, /stats
-├── upload/           — Document ingestion (port 8004)
-│   └── api.py        — /upload
-└── agent/            — LangGraph/CrewAI orchestration (port 8005)
-    ├── api.py        — /agent/query (accepts agent_framework: langgraph|crewai)
-    └── Dockerfile    — copies ~20 RAG pipeline modules; delegates to document_store + llm via HTTP
-```
+`deploy/` directory was removed. To redeploy, regenerate scripts from the patterns used in this session.
 
-### Dependency Graph
-
-```
-gateway ──┬── document_store  (HTTP, Phase 2b real)
-          ├── llm             (HTTP, Phase 2c real)
-          ├── bible           (HTTP, Phase 2e real)
-          ├── upload          (HTTP, Phase 2f real)
-           └── agent           (HTTP, real)
-
-agent ──┬── document_store  (HTTP)
-        └── llm             (HTTP)
-
-bible ──┬── document_store  (HTTP)
-        └── llm             (HTTP)
-
-upload ──→ document_store  (HTTP)
-```
-
-### Extraction Order
-
-| Phase | Service | Status |
-|---|---|---|
-| 2a | Infrastructure (services/ + Dockerfiles) | ✅ Done |
-| 2b | Document Store Service | ✅ Done |
-| 2c | LLM Service | ✅ Done |
-| 2d | Gateway refactor (api.py delegates) | ✅ Done |
-| 2e | Bible Service | ✅ Done |
-| 2f | Upload Service | ✅ Done |
-| 2g | Agent Service | ✅ Done |
-
-### Gateway Clients (`app/gateway_clients.py`)
-
-The gateway transparently delegates to microservices via HTTP when configured:
-
-```python
-# app/api.py
-from app.gateway_clients import RemoteVectorStore, remote_generate, is_remote_vs, is_remote_llm
-
-if is_remote_vs():
-    vs = RemoteVectorStore()    # delegates to document_store service
-if is_remote_llm():
-    generate_answer = remote_generate  # delegates to LLM service
-```
-
-- `DOCUMENT_STORE_URL` env var → `RemoteVectorStore` proxy for search/add/delete/list_sources
-- `LLM_SERVICE_URL` env var → `remote_generate()` for top-level LLM calls
-- Internal pipeline modules (`rag/pipeline.py`, `agents/graph.py`) use local imports (in-process)
-- When URLs are not set, gateway falls back to local `VectorStore` / `llm.generate_answer` (current monolith behavior)
-
-### Running Locally (development)
-
-Each service can run standalone via uvicorn, e.g.:
+### To Restart Deployment (from scratch)
 
 ```bash
-# Terminal 1 — Document Store
-uvicorn services.document_store.api:app --reload --port 8001
+# 1. Create ECR repos
+aws ecr create-repository --repository-name enterprise-rag-gateway --region ap-south-1
+# ... repeat for enterprise-rag-{document-store,llm,bible,upload,agent}
 
-# Terminal 2 — LLM
-uvicorn services.llm.api:app --reload --port 8002
+# 2. Authenticate Docker
+aws ecr get-login-password --region ap-south-1 \
+  | docker login --username AWS --password-stdin 290199195192.dkr.ecr.ap-south-1.amazonaws.com
 
-# Terminal 3 — Gateway (monolith, delegates when URLs set)
-uvicorn app.api:app --reload --port 8000
+# 3. Build & push all 6 images
+docker build -t 290199195192.dkr.ecr.ap-south-1.amazonaws.com/enterprise-rag-gateway:latest .
+docker push 290199195192.dkr.ecr.ap-south-1.amazonaws.com/enterprise-rag-gateway:latest
+# ... repeat for all 6 services using services/*/Dockerfile
 
-# Or with remote delegation:
-DOCUMENT_STORE_URL=http://localhost:8001 LLM_SERVICE_URL=http://localhost:8002 uvicorn app.api:app --reload --port 8000
+# 4. Infrastructure (SG, Redis, MongoDB)
+#    Create security group in default VPC (vpc-0323b9ec086cc521d)
+#    Create ElastiCache Redis cluster
+#    Launch EC2 instance for MongoDB (t3.micro, ami-00455f385512f4bb5)
+
+# 5. ECS cluster + task definitions + services + ALB
+# 6. Deploy frontend: npm run build; aws s3 sync build/ s3://enterprise-rag-frontend/
+# 7. Create CloudFront distribution pointing to S3
 ```
+
+### Key env vars for ECS task definitions
+
+- `GROQ_API_KEY` — Groq API key
+- `HF_API_TOKEN` — Hugging Face API key  
+- `JWT_SECRET` — generate with `openssl rand -hex 32`
+- `REDIS_URL` — ElastiCache endpoint (format: `redis://<endpoint>:6379`)
+- `MONGO_URL` — `mongodb://<EC2_MONGODB_IP>:27017`

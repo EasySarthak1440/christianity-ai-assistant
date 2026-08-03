@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -79,7 +80,6 @@ async def _ready_middleware(request, call_next):
 
 @app.on_event("startup")
 async def _startup():
-    import asyncio
     asyncio.create_task(_init_app())
 
 async def _init_app():
@@ -105,7 +105,7 @@ async def _init_app():
     else:
         print("Building Bible index for the first time (this may take ~15s)...")
         try:
-            scripture_store.build_index(BIBLE_JSON_URL)
+            await asyncio.to_thread(scripture_store.build_index, BIBLE_JSON_URL)
         except Exception as e:
             print(f"Warning: Bible index build failed: {e}")
 

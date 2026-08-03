@@ -8,7 +8,7 @@ import DenominationSelector from './components/DenominationSelector'
 import ImageGenerator from './components/ImageGenerator'
 import ScriptureCard from './components/ScriptureCard'
 
-const API = "http://localhost:8000"
+const API = "https://d2vdkua64gpad1.cloudfront.net"
 
 const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

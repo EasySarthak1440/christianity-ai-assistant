@@ -58,7 +58,7 @@ class ScriptureStore:
     def build_index(self, url: str = BIBLE_JSON_URL) -> None:
         os.makedirs(INDEX_DIR, exist_ok=True)
         print(f"[ScriptureStore] Downloading KJV Bible from {url} ...")
-        response = urllib.request.urlopen(url)
+        response = urllib.request.urlopen(url, timeout=60)
         data = json.loads(response.read().decode("utf-8"))
         books = data.get("books", data)
 

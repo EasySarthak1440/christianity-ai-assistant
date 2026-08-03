@@ -1,7 +1,7 @@
 import { useState, useRef } from "react"
 import { Image, Send, AlertCircle, Loader } from "lucide-react"
 
-const API = "http://localhost:8000"
+const API = "https://d2vdkua64gpad1.cloudfront.net"
 
 const glass = { background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(20px)" }
 

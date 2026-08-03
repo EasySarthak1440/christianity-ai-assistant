@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { BookOpen } from "lucide-react"
 
-const API = "http://localhost:8000"
+const API = "https://d2vdkua64gpad1.cloudfront.net"
 
 const containerStyle = {
   padding: "12px 14px",
